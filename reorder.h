@@ -64,7 +64,7 @@ namespace Reorder
     void permute_buffer_order(const char* const BUFFER, char* outBuffer, const int* const ORDER, const unsigned ORDER_LENGTH);
 
     //Reorder matrix (bit-swapping on memory-mapped file)
-    void reorder_matrix(char* mapped_file, const unsigned HEADER, const unsigned COLUMNS, const unsigned ROW_LENGTH, const unsigned NB_ROWS, const std::vector<int>& ORDER);
+    void reorder_matrix(char* mapped_file, const unsigned HEADER, const unsigned COLUMNS, const unsigned ROW_LENGTH, const long unsigned NB_ROWS, const std::vector<int>& ORDER);
 
     //Start multiple path TSP instances to be solved using Nearest-Neighbor
     void TSP_NN(const char* const transposed_matrix, const std::vector<DistanceMatrix*>& DISTANCE_MATRICES, const unsigned SUBSAMPLED_ROWS, std::vector<int>& order);
