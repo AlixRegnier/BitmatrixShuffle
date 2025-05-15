@@ -1,4 +1,4 @@
-#include "reorder.h"
+#include <reorder.h>
 
 namespace Reorder 
 {
@@ -71,7 +71,7 @@ namespace Reorder
     void build_NN(const char* const transposed_matrix, DistanceMatrix * DISTANCE_MATRIX, const unsigned SUBSAMPLED_ROWS, const unsigned OFFSET, std::vector<int>& order)
     {
         //Pick a random first vertex
-        int firstVertex = RNG::rand_uint32_t(0, DISTANCE_MATRIX->width() - 1);
+        int firstVertex = RNG::rand_uint32_t(0, DISTANCE_MATRIX->width());
         
         //Vector of added vertices (set true for the first vertex)
         std::vector<bool> alreadyAdded;
@@ -123,7 +123,7 @@ namespace Reorder
     void build_double_end_NN(const char* const  transposed_matrix, DistanceMatrix * DISTANCE_MATRIX, const unsigned SUBSAMPLED_ROWS, const unsigned OFFSET, std::vector<int>& order)
     {
         //Pick a random first vertex
-        int firstVertex = RNG::rand_uint32_t(0, DISTANCE_MATRIX->width() - 1);
+        int firstVertex = RNG::rand_uint32_t(0, DISTANCE_MATRIX->width());
         
         //Vector of added vertices (set true for the first vertex)
         std::vector<bool> alreadyAdded;
@@ -343,12 +343,11 @@ namespace Reorder
         int fd = open(MATRIX.c_str(), O_RDWR); //Open file in both read/write modes
 
         //Get file size
-        const int FILE_SIZE = lseek(fd, 0, SEEK_END);
+        const long unsigned FILE_SIZE = lseek(fd, 0, SEEK_END);
         lseek(fd, 0, SEEK_SET);
 
         //Map file in memory
         char* mapped_file = (char*)mmap(nullptr, FILE_SIZE, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
-        posix_madvise(mapped_file, FILE_SIZE, POSIX_MADV_SEQUENTIAL);
 
         //Number of matrix columns
         const unsigned COLUMNS = (SAMPLES+7)/8*8;
@@ -357,7 +356,7 @@ namespace Reorder
         const unsigned ROW_LENGTH = (SAMPLES+7)/8;
 
         //Number of matrix rows
-        const unsigned NB_ROWS = (FILE_SIZE-HEADER) / ROW_LENGTH;
+        const long unsigned NB_ROWS = (FILE_SIZE-HEADER) / ROW_LENGTH;
 
         //Number of group of columns
         const unsigned NB_GROUPS = (COLUMNS+GROUPSIZE-1)/GROUPSIZE;
@@ -385,13 +384,11 @@ namespace Reorder
         for(DistanceMatrix* m : distanceMatrices)
             delete m;
         
-        //CHECK RATIO BETWEEN TSP path weight and original path weight
-        //if below a given threshold, don't reorder the matrix
-        //if(original_avg_weight * 1.0 / tsp_avg_weight <= threshold)
-        //    return; //filling not needed as column are no longer permuted
-        
         //Shift blank columns (when samples is not a multiple of 8) to their original location
         immutable_filling_columns_inplace(order, COLUMNS, COLUMNS-SAMPLES);
+
+        //Tell system that data will be accessed sequentially
+        posix_madvise(mapped_file, FILE_SIZE, POSIX_MADV_SEQUENTIAL);
 
         //Reorder matrix
         reorder_matrix(mapped_file, HEADER, COLUMNS, ROW_LENGTH, NB_ROWS, order);
@@ -415,7 +412,7 @@ namespace Reorder
             outBuffer[i >> 3] = (outBuffer[i >> 3] << 1) | get_bit_from_position(BUFFER, ORDER[i]);
     }
 
-    void reorder_matrix(char * mapped_file, const unsigned HEADER, const unsigned COLUMNS, const unsigned ROW_LENGTH, const unsigned NB_ROWS, const std::vector<int>& ORDER)
+    void reorder_matrix(char * mapped_file, const unsigned HEADER, const unsigned COLUMNS, const unsigned ROW_LENGTH, const long unsigned NB_ROWS, const std::vector<int>& ORDER)
     {
         //Buffer to store a row
         char * buffer = new char[ROW_LENGTH];
