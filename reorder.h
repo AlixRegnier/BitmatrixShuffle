@@ -9,7 +9,6 @@
 #include <fstream>
 #include <iomanip>
 #include <iostream>
-#include <set>
 #include <stdexcept>
 #include <sys/mman.h>
 #include <random>
@@ -28,22 +27,22 @@ namespace Reorder
 {
     struct
     {
-        int index;
+        unsigned index;
         double distance;
     } typedef IndexDistance;
 
     
     //Build a path by taking closest vertex (from tail)
-    void build_NN(const char* const TRANSPOSED_MATRIX, DistanceMatrix * DISTANCE_MATRIX, const unsigned SUBSAMPLED_ROWS, const unsigned OFFSET, std::vector<int>& order);
+    void build_NN(const char* const TRANSPOSED_MATRIX, DistanceMatrix * DISTANCE_MATRIX, const unsigned SUBSAMPLED_ROWS, const unsigned OFFSET, std::vector<unsigned>& order);
 
     //Build a path by taking closest vertex (compare closest from tail and  closest from head)
-    void build_double_end_NN(const char* const  TRANSPOSED_MATRIX, DistanceMatrix * DISTANCE_MATRIX, const unsigned SUBSAMPLED_ROWS, const unsigned OFFSET, std::vector<int>& order);
+    void build_double_end_NN(const char* const  TRANSPOSED_MATRIX, DistanceMatrix * DISTANCE_MATRIX, const unsigned SUBSAMPLED_ROWS, const unsigned OFFSET, std::vector<unsigned>& order);
     
     //Distance computation between two columns
     double columns_hamming_distance(const char* const  TRANSPOSED_MATRIX, const unsigned MAX_ROW, const unsigned COLUMN_A, const unsigned COLUMN_B);
     
     //Nearest-Neighbor
-    IndexDistance find_closest_vertex(VPTree<int>& VPTREE, const unsigned VERTEX, const std::vector<bool>& ALREADY_ADDED);
+    IndexDistance find_closest_vertex(VPTree<unsigned>& VPTREE, const unsigned VERTEX, const std::vector<bool>& ALREADY_ADDED);
         
     //Extract bit from a buffer of bytes (big-endian), result can only be 0x00 or 0x01
     char get_bit_from_position(const char* const BYTES, const unsigned POSITION);
@@ -55,19 +54,19 @@ namespace Reorder
     size_t hamming_distance(const char* const BUFFER1, const char* const BUFFER2, const size_t LENGTH);
     
     //Fix order (if there are filling blank columns)
-    void immutable_filling_columns_inplace(std::vector<int>& order, const unsigned COLUMNS, const unsigned FILL);
+    void immutable_filling_columns_inplace(std::vector<unsigned>& order, const unsigned COLUMNS, const unsigned FILL);
     
     //Take as input the program arguments (parsed)
-    void launch(const std::string& MATRIX, const unsigned SAMPLES, const unsigned HEADER, const unsigned GROUPSIZE, unsigned subsampled_rows);
+    void launch(const char * const REFERENCE_MATRIX, const std::vector<char*>& MATRICES, const unsigned SAMPLES, const unsigned HEADER, const unsigned GROUPSIZE, unsigned subsampled_rows, const char * const OUT_ORDER);
 
     //Swaps the bits of a buffer into another buffer according to given order
-    void permute_buffer_order(const char* const BUFFER, char* outBuffer, const int* const ORDER, const unsigned ORDER_LENGTH);
+    void permute_buffer_order(const char* const BUFFER, char* outBuffer, const unsigned* const ORDER, const unsigned ORDER_LENGTH);
 
     //Reorder matrix (bit-swapping on memory-mapped file)
-    void reorder_matrix(char* mapped_file, const unsigned HEADER, const unsigned COLUMNS, const unsigned ROW_LENGTH, const long unsigned NB_ROWS, const std::vector<int>& ORDER);
+    void reorder_matrix(char* mapped_file, const unsigned HEADER, const unsigned COLUMNS, const unsigned ROW_LENGTH, const long unsigned NB_ROWS, const std::vector<unsigned>& ORDER);
 
     //Start multiple path TSP instances to be solved using Nearest-Neighbor
-    void TSP_NN(const char* const transposed_matrix, const std::vector<DistanceMatrix*>& DISTANCE_MATRICES, const unsigned SUBSAMPLED_ROWS, std::vector<int>& order);
+    void TSP_NN(const char* const transposed_matrix, const std::vector<DistanceMatrix*>& DISTANCE_MATRICES, const unsigned SUBSAMPLED_ROWS, std::vector<unsigned>& order);
 };
 
 #endif
