@@ -3,23 +3,23 @@
 
 #include <stdexcept>
 #include <vector>
-
+#include <cstdlib>
 #include <utils.h>
 
 class DistanceMatrix
 {
     public:
         DistanceMatrix() = default;
-        DistanceMatrix(unsigned size);
+        DistanceMatrix(std::size_t size);
 
-        void resize(unsigned size);
-        unsigned width() const;
-        double get(int x, int y) const;
-        void set(int x, int y, double distance);
+        void resize(std::size_t size);
+        std::size_t width() const;
+        double get(std::size_t x, std::size_t y) const;
+        void set(std::size_t x, std::size_t y, double distance);
     private:
-        std::size_t index(int x, int y) const;
+        std::size_t index(std::size_t x, std::size_t y) const;
         std::vector<double> matrix;
-        unsigned _size;
+        std::size_t _size;
 };
 
 #endif

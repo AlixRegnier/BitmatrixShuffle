@@ -68,7 +68,7 @@ namespace Reorder
     #undef INP
     
     //TSP path
-    void build_NN(const char* const transposed_matrix, DistanceMatrix * DISTANCE_MATRIX, const unsigned SUBSAMPLED_ROWS, const unsigned OFFSET, std::vector<unsigned>& order)
+    void build_NN(const char* const transposed_matrix, DistanceMatrix * DISTANCE_MATRIX, const std::size_t SUBSAMPLED_ROWS, const std::size_t OFFSET, std::vector<unsigned>& order)
     {
         //Pick a random first vertex
         unsigned firstVertex = RNG::rand_uint32_t(0, DISTANCE_MATRIX->width());
@@ -91,7 +91,7 @@ namespace Reorder
         unsigned counter = 0;
 
         DistanceFunctions df = VPTree<unsigned>::bindDistanceFunctions(
-            [=, &counter, t = transposed_matrix](unsigned a, unsigned b) -> double {
+            [=, &counter](unsigned a, unsigned b) -> double {
                 ++counter;
                 return columns_hamming_distance(transposed_matrix, SUBSAMPLED_ROWS, a+OFFSET, b+OFFSET);
             },
@@ -120,7 +120,7 @@ namespace Reorder
 
 
     //TSP path
-    void build_double_end_NN(const char* const transposed_matrix, DistanceMatrix * DISTANCE_MATRIX, const unsigned SUBSAMPLED_ROWS, const unsigned OFFSET, std::vector<unsigned>& order)
+    void build_double_end_NN(const char* const transposed_matrix, DistanceMatrix * DISTANCE_MATRIX, const std::size_t SUBSAMPLED_ROWS, const std::size_t OFFSET, std::vector<unsigned>& order)
     {
         //Pick a random first vertex
         unsigned firstVertex = RNG::rand_uint32_t(0, DISTANCE_MATRIX->width());
@@ -145,7 +145,6 @@ namespace Reorder
         DistanceFunctions df = VPTree<unsigned>::bindDistanceFunctions(
             [=, &counter](unsigned a, unsigned b) -> double {
                 ++counter;
-                
                 return columns_hamming_distance(transposed_matrix, SUBSAMPLED_ROWS, a+OFFSET, b+OFFSET);
             },
             [&DISTANCE_MATRIX](unsigned a, unsigned b) -> double { return DISTANCE_MATRIX->get(a, b); },
@@ -200,7 +199,7 @@ namespace Reorder
 
 
 
-    double columns_hamming_distance(const char* const transposed_matrix, const unsigned MAX_ROW, const unsigned COLUMN_A, const unsigned COLUMN_B)
+    double columns_hamming_distance(const char* const transposed_matrix, const std::size_t MAX_ROW, const unsigned COLUMN_A, const unsigned COLUMN_B)
     {
         return 1.0*hamming_distance(transposed_matrix + (COLUMN_A)*(MAX_ROW/8), transposed_matrix + (COLUMN_B)*(MAX_ROW/8), MAX_ROW/8) / MAX_ROW;
     }
@@ -226,7 +225,7 @@ namespace Reorder
 
 
 
-    const char* const get_transposed_matrix(const char * const MAPPED_FILE, const unsigned HEADER, const unsigned COLUMNS, const unsigned ROW_LENGTH, const unsigned NB_GROUPS, const unsigned GROUPSIZE, const unsigned long SUBSAMPLED_ROWS, std::vector<DistanceMatrix*>& distanceMatrices)
+    const char* const get_transposed_matrix(const char * const MAPPED_FILE, const unsigned HEADER, const unsigned COLUMNS, const unsigned ROW_LENGTH, const unsigned NB_GROUPS, const unsigned GROUPSIZE, const std::size_t SUBSAMPLED_ROWS, std::vector<DistanceMatrix*>& distanceMatrices)
     {
         unsigned last_group_size;
         
@@ -332,7 +331,7 @@ namespace Reorder
             order[i] = i;
     }
 
-    void launch(const char * const REFERENCE_MATRIX, const std::vector<char*>& MATRICES, const unsigned SAMPLES, const unsigned HEADER, const unsigned GROUPSIZE, unsigned subsampled_rows, const char * const OUT_ORDER)
+    void launch(const char * const REFERENCE_MATRIX, const std::vector<char*>& MATRICES, const unsigned SAMPLES, const unsigned HEADER, const unsigned GROUPSIZE, std::size_t subsampled_rows, const char * const OUT_ORDER)
     {
         if(SAMPLES == 0)
             throw std::runtime_error("SAMPLES can't be equal to 0");
@@ -346,7 +345,7 @@ namespace Reorder
             throw std::runtime_error("Failed to open a file descriptor on reference matrix");
 
         //Get file size
-        const long unsigned FILE_SIZE = lseek(fd, 0, SEEK_END);
+        const std::size_t FILE_SIZE = lseek(fd, 0, SEEK_END);
         lseek(fd, 0, SEEK_SET);
 
         //Map file in memory
@@ -359,7 +358,7 @@ namespace Reorder
         const unsigned ROW_LENGTH = (SAMPLES+7)/8;
 
         //Number of matrix rows
-        const long unsigned NB_ROWS = (FILE_SIZE - HEADER) / ROW_LENGTH;
+        const std::size_t NB_ROWS = (FILE_SIZE - HEADER) / ROW_LENGTH;
 
         if(NB_ROWS < subsampled_rows)
             throw std::runtime_error("Number of subsampled rows can't be greater to the number of rows in the binary matrix. Maybe one of the parameters is wrong ?");
@@ -435,15 +434,15 @@ namespace Reorder
             outBuffer[i >> 3] = (outBuffer[i >> 3] << 1) | get_bit_from_position(BUFFER, ORDER[i]);
     }
 
-    void reorder_matrix(char * mapped_file, const unsigned HEADER, const unsigned COLUMNS, const unsigned ROW_LENGTH, const long unsigned NB_ROWS, const std::vector<unsigned>& ORDER)
+    void reorder_matrix(char * mapped_file, const unsigned HEADER, const unsigned COLUMNS, const unsigned ROW_LENGTH, const std::size_t NB_ROWS, const std::vector<unsigned>& ORDER)
     {
         //Buffer to copy a row
         char * buffer = new char[ROW_LENGTH];
 
-        long unsigned index = 0;
+        std::size_t index = 0;
 
         //Permutate columns
-        for(unsigned i = 0; i < NB_ROWS; ++i)
+        for(std::size_t i = 0; i < NB_ROWS; ++i)
         {
             std::memcpy(buffer, mapped_file+index+HEADER, ROW_LENGTH);
             
@@ -455,9 +454,9 @@ namespace Reorder
         delete[] buffer;
     }
 
-    void TSP_NN(const char* const transposed_matrix, const std::vector<DistanceMatrix*>& DISTANCE_MATRICES, const unsigned SUBSAMPLED_ROWS, std::vector<unsigned>& order)
+    void TSP_NN(const char* const transposed_matrix, const std::vector<DistanceMatrix*>& DISTANCE_MATRICES, const std::size_t SUBSAMPLED_ROWS, std::vector<unsigned>& order)
     {
-        unsigned offset = 0; //Offset for global order assignation
+        std::size_t offset = 0; //Offset for global order assignation
 
         for(unsigned i = 0; i < DISTANCE_MATRICES.size(); ++i)
         {
@@ -479,12 +478,12 @@ int main(int argc, char ** argv)
 
     RNG::set_seed(42);
 
-    char* reference_matrix =   argv[1];
-    unsigned samples =         (unsigned)atol(argv[2]);
-    unsigned header =          (unsigned)atol(argv[3]);
-    unsigned groupsize =       (unsigned)atol(argv[4]);
-    unsigned subsampled_rows = (unsigned)atol(argv[5]);
-    char* out_order =          argv[6];
+    char* reference_matrix = argv[1];
+    unsigned samples = (unsigned)atol(argv[2]);
+    unsigned header = (unsigned)atol(argv[3]);
+    unsigned groupsize = (unsigned)atol(argv[4]);
+    std::size_t subsampled_rows = (std::size_t)atoll(argv[5]);
+    char* out_order = argv[6];
 
     std::vector<char*> matrices;
     matrices.resize(argc - 7);

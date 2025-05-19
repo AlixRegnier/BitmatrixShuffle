@@ -55,13 +55,12 @@ namespace Reorder
                 throw std::runtime_error("Failed to open a file descriptor on matrix");
 
             //Get file size
-            const long unsigned FILE_SIZE = lseek(fd, 0, SEEK_END);
-            
-            //Number of matrix rows
-            const long unsigned NB_ROWS = (FILE_SIZE - HEADER) / ROW_LENGTH;
-
+            const std::size_t FILE_SIZE = lseek(fd, 0, SEEK_END);
             lseek(fd, 0, SEEK_SET);
             
+            //Number of matrix rows
+            const std::size_t NB_ROWS = (FILE_SIZE - HEADER) / ROW_LENGTH;
+
             std::cout << "\rReordering matrix " << (i+1) << "/" << MATRICES.size() << " ..." << std::flush;
 
             char* mapped_file = (char*)mmap(nullptr, FILE_SIZE, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
@@ -88,7 +87,7 @@ namespace Reorder
             outBuffer[i >> 3] = (outBuffer[i >> 3] << 1) | get_bit_from_position(BUFFER, ORDER[i]);
     }
 
-    void reorder_matrix(char * mapped_file, const unsigned HEADER, const unsigned COLUMNS, const unsigned ROW_LENGTH, const long unsigned NB_ROWS, const std::vector<unsigned>& ORDER)
+    void reorder_matrix(char * mapped_file, const unsigned HEADER, const unsigned COLUMNS, const unsigned ROW_LENGTH, const std::size_t NB_ROWS, const std::vector<unsigned>& ORDER)
     {
         //Buffer to copy a row
         char * buffer = new char[ROW_LENGTH];

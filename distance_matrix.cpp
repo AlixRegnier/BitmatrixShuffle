@@ -1,14 +1,14 @@
 #include <distance_matrix.h>
 
 //DistanceMatrix implementation
-DistanceMatrix::DistanceMatrix(unsigned size)
+DistanceMatrix::DistanceMatrix(std::size_t size)
 {
     resize(size);
 }
 
 #include <iostream>
 
-double DistanceMatrix::get(int x, int y) const
+double DistanceMatrix::get(std::size_t x, std::size_t y) const
 {
     if(x == y)
         return 0.0;
@@ -16,7 +16,7 @@ double DistanceMatrix::get(int x, int y) const
     return matrix[index(x, y)];
 }
 
-void DistanceMatrix::set(int x, int y, double distance)
+void DistanceMatrix::set(std::size_t x, std::size_t y, double distance)
 {
     if(x == y)
         return;
@@ -24,18 +24,18 @@ void DistanceMatrix::set(int x, int y, double distance)
     matrix[index(x, y)] = distance;
 }
 
-void DistanceMatrix::resize(unsigned size)
+void DistanceMatrix::resize(std::size_t size)
 {
     _size = size;
-    matrix.resize(size*(size-1)/2, NULL_DISTANCE); //Temporary to full matrix space, will later be encoded in triangle matrix
+    matrix.resize(size*(size-1)/2, NULL_DISTANCE); //Triangle matrix filled with NULL_DISTANCE
 }
 
-unsigned DistanceMatrix::width() const
+std::size_t DistanceMatrix::width() const
 {
     return _size;
 }
 
-std::size_t DistanceMatrix::index(int x, int y) const
+std::size_t DistanceMatrix::index(std::size_t x, std::size_t y) const
 {    
     if(x < y)
         std::swap(x, y);
