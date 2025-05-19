@@ -295,7 +295,7 @@ namespace Reorder
     }
 
 
-    //In some tools, bytes
+    //Bring back filling columns (columns that are not samples but there to fill last byte of each row)
     void immutable_filling_columns_inplace(std::vector<unsigned>& order, const unsigned COLUMNS, const unsigned FILL)
     {
         if(FILL == 0)
