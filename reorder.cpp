@@ -1,4 +1,13 @@
 #include <reorder.h>
+#include <chrono>
+
+#define DECLARE_TIMER std::chrono::time_point<std::chrono::high_resolution_clock> __start_timer, __stop_timer; std::size_t __integral_time; 
+#define START_TIMER __start_timer = std::chrono::high_resolution_clock::now(); \
+                    std::cout << std::flush
+
+#define END_TIMER __stop_timer = std::chrono::high_resolution_clock::now(); \
+                  __integral_time = static_cast<std::size_t>(std::chrono::duration_cast<std::chrono::milliseconds>(__stop_timer - __start_timer).count()); \
+                  std::cout << std::setprecision(3) << (__integral_time / 1000.0) << "s" << std::endl
 
 namespace Reorder 
 {
@@ -68,23 +77,23 @@ namespace Reorder
     #undef INP
     
     //TSP path
-    void build_NN(const char* const transposed_matrix, DistanceMatrix * DISTANCE_MATRIX, const std::size_t SUBSAMPLED_ROWS, const std::size_t OFFSET, std::vector<unsigned>& order)
+    void build_NN(const char* const transposed_matrix, DistanceMatrix& distanceMatrix, const std::size_t SUBSAMPLED_ROWS, const std::size_t OFFSET, std::vector<unsigned>& order)
     {
         //Pick a random first vertex
-        unsigned firstVertex = RNG::rand_uint32_t(0, DISTANCE_MATRIX->width());
+        unsigned firstVertex = RNG::rand_uint32_t(0, distanceMatrix.width());
         
         //Vector of added vertices (set true for the first vertex)
         std::vector<bool> alreadyAdded;
-        alreadyAdded.resize(DISTANCE_MATRIX->width());
+        alreadyAdded.resize(distanceMatrix.width());
         alreadyAdded[firstVertex] = true;
 
         //Deque for building path with first vertex as starting point
         std::vector<unsigned> path = {firstVertex};
-        path.reserve(DISTANCE_MATRIX->width());
+        path.reserve(distanceMatrix.width());
 
         //Build vector of indices for VPTree
         std::vector<unsigned> vertices;
-        vertices.resize(DISTANCE_MATRIX->width());
+        vertices.resize(distanceMatrix.width());
         for(unsigned i = 0; i < vertices.size(); ++i)
             vertices[i] = i;
 
@@ -95,39 +104,38 @@ namespace Reorder
                 ++counter;
                 return columns_hamming_distance(transposed_matrix, SUBSAMPLED_ROWS, a+OFFSET, b+OFFSET);
             },
-            [&DISTANCE_MATRIX](unsigned a, unsigned b) -> double { return DISTANCE_MATRIX->get(a, b); },
-            [&DISTANCE_MATRIX](unsigned a, unsigned b, double d) { DISTANCE_MATRIX->set(a, b, d); }
+            [&distanceMatrix](unsigned a, unsigned b) -> double { return distanceMatrix.get(a, b); },
+            [&distanceMatrix](unsigned a, unsigned b, double d) { distanceMatrix.set(a, b, d); }
         );
 
-        VPTree root(vertices, &df);
+        VPTree<unsigned> root(vertices, &df);
 
         //Added second vertex to data structures
         //Find next vertices to add by checking which is the minimum to take
-        for(unsigned i = 1; i < DISTANCE_MATRIX->width(); ++i)
+        for(unsigned i = 1; i < distanceMatrix.width(); ++i)
         {
             IndexDistance match = find_closest_vertex(root, path[i-1], alreadyAdded);
             alreadyAdded[match.index] = true;
             path.push_back(match.index);
         }
 
-        std::cout << "Maximum number of distance computations: " << (DISTANCE_MATRIX->width() * (DISTANCE_MATRIX->width() - 1) / 2) << std::endl;
-        std::cout << "Distances computed with VPTree: " << counter << std::endl;
+        std::cout << "\tComputed distances (VPTree): " << counter << "/" << (distanceMatrix.width() * (distanceMatrix.width() - 1) / 2) <<  std::endl;
 
         //Store global order
-        for(unsigned i = 0; i < DISTANCE_MATRIX->width(); ++i)
+        for(unsigned i = 0; i < distanceMatrix.width(); ++i)
             order[i+OFFSET] = path[i] + OFFSET; //Add offset because columns are addressed by their global location
     }
 
 
     //TSP path
-    void build_double_end_NN(const char* const transposed_matrix, DistanceMatrix * DISTANCE_MATRIX, const std::size_t SUBSAMPLED_ROWS, const std::size_t OFFSET, std::vector<unsigned>& order)
+    void build_double_end_NN(const char* const transposed_matrix, DistanceMatrix& distanceMatrix, const std::size_t SUBSAMPLED_ROWS, const std::size_t OFFSET, std::vector<unsigned>& order)
     {
         //Pick a random first vertex
-        unsigned firstVertex = RNG::rand_uint32_t(0, DISTANCE_MATRIX->width());
+        unsigned firstVertex = RNG::rand_uint32_t(0, distanceMatrix.width());
         
         //Vector of added vertices (set true for the first vertex)
         std::vector<bool> alreadyAdded;
-        alreadyAdded.resize(DISTANCE_MATRIX->width());
+        alreadyAdded.resize(distanceMatrix.width());
         alreadyAdded[firstVertex] = true;
 
         //Deque for building path with first vertex as starting point
@@ -135,7 +143,7 @@ namespace Reorder
 
         //Build vector of indices for VPTree
         std::vector<unsigned> vertices;
-        vertices.resize(DISTANCE_MATRIX->width());
+        vertices.resize(distanceMatrix.width());
         for(unsigned i = 0; i < vertices.size(); ++i)
             vertices[i] = i;
 
@@ -147,11 +155,11 @@ namespace Reorder
                 ++counter;
                 return columns_hamming_distance(transposed_matrix, SUBSAMPLED_ROWS, a+OFFSET, b+OFFSET);
             },
-            [&DISTANCE_MATRIX](unsigned a, unsigned b) -> double { return DISTANCE_MATRIX->get(a, b); },
-            [&DISTANCE_MATRIX](unsigned a, unsigned b, double d) { DISTANCE_MATRIX->set(a, b, d); }
+            [&distanceMatrix](unsigned a, unsigned b) -> double { return distanceMatrix.get(a, b); },
+            [&distanceMatrix](unsigned a, unsigned b, double d) { distanceMatrix.set(a, b, d); }
         );
 
-        VPTree root(vertices, &df);
+        VPTree<unsigned> root(vertices, &df);
 
         //Find second vertex
         IndexDistance second = find_closest_vertex(root, firstVertex, alreadyAdded);
@@ -165,7 +173,7 @@ namespace Reorder
         IndexDistance b = find_closest_vertex(root, orderDeque.back(), alreadyAdded);
 
         //Find next vertices to add by checking which is the minimum to take
-        for(unsigned i = 2; i < DISTANCE_MATRIX->width(); ++i)
+        for(unsigned i = 2; i < distanceMatrix.width(); ++i)
         {
             if(a.distance < b.distance)
             {
@@ -189,11 +197,10 @@ namespace Reorder
             }
         }
 
-        std::cout << "Expected distance computations: " << (DISTANCE_MATRIX->width() * (DISTANCE_MATRIX->width() - 1) / 2) << std::endl;
-        std::cout << "Distances computed with VPTree: " << counter << std::endl;
+        std::cout << "\tComputed distances (VPTree): " << counter << "/" << (distanceMatrix.width() * (distanceMatrix.width() - 1) / 2) <<  std::endl;
 
         //Store global order
-        for(unsigned i = 0; i < DISTANCE_MATRIX->width(); ++i)
+        for(unsigned i = 0; i < distanceMatrix.width(); ++i)
             order[i+OFFSET] = orderDeque[i] + OFFSET; //Add offset because columns are addressed by their global location
     }
 
@@ -224,28 +231,8 @@ namespace Reorder
     }
 
 
-
-    const char* const get_transposed_matrix(const char * const MAPPED_FILE, const unsigned HEADER, const unsigned COLUMNS, const unsigned ROW_LENGTH, const unsigned NB_GROUPS, const unsigned GROUPSIZE, const std::size_t SUBSAMPLED_ROWS, std::vector<DistanceMatrix*>& distanceMatrices)
+    const char* const get_transposed_matrix(const char * const MAPPED_FILE, const unsigned HEADER, const unsigned ROW_LENGTH, const std::size_t SUBSAMPLED_ROWS)
     {
-        unsigned last_group_size;
-        
-        if(SUBSAMPLED_ROWS % 8 != 0)
-            throw std::invalid_argument("The number of subsampled rows must be a multiple of 8 (for transposition)");
-
-        if(GROUPSIZE % 8 != 0)
-            throw std::invalid_argument("The size of a group of columns must be a multiple of 8 (for transposition)");
-
-        if(COLUMNS % GROUPSIZE == 0)
-            last_group_size = GROUPSIZE;
-        else
-            last_group_size = COLUMNS % GROUPSIZE;
-    
-        //Create matrices
-        //Don't forget to free them later!
-        for(unsigned i = 0; i < NB_GROUPS-1; ++i)
-            distanceMatrices[i] = new DistanceMatrix(GROUPSIZE);
-        distanceMatrices[NB_GROUPS-1] = new DistanceMatrix(last_group_size);
-
         //Transposed buffer containing concatenated columns
         char * transposed_matrix = new char[(8*ROW_LENGTH)*(SUBSAMPLED_ROWS/8)];
 
@@ -333,13 +320,18 @@ namespace Reorder
 
     void launch(const char * const REFERENCE_MATRIX, const std::vector<char*>& MATRICES, const unsigned SAMPLES, const unsigned HEADER, const unsigned GROUPSIZE, std::size_t subsampled_rows, const char * const OUT_ORDER)
     {
+        DECLARE_TIMER;
+
         if(SAMPLES == 0)
             throw std::runtime_error("SAMPLES can't be equal to 0");
 
         if(MATRICES.size() == 0)
             throw std::runtime_error("Got empty vector of matrix path");
+        
+        if(GROUPSIZE % 8 != 0)
+            throw std::invalid_argument("The size of a group of columns must be a multiple of 8 (for transposition)");
 
-        int fd = open(REFERENCE_MATRIX, O_RDONLY); //Open file in both read/write modes
+        int fd = open(REFERENCE_MATRIX, O_RDONLY); //Open reference matrix in read-only
         
         if(fd < 0)
             throw std::runtime_error("Failed to open a file descriptor on reference matrix");
@@ -363,26 +355,27 @@ namespace Reorder
         if(NB_ROWS < subsampled_rows)
             throw std::runtime_error("Number of subsampled rows can't be greater to the number of rows in the binary matrix. Maybe one of the parameters is wrong ?");
 
-        //Number of group of columns
-        const unsigned NB_GROUPS = (COLUMNS+GROUPSIZE-1)/GROUPSIZE;
-
         //If defined to 0: Sample all matrix rows (at the number of rows must be a multiple of 8) 
         if(subsampled_rows == 0)
             subsampled_rows = NB_ROWS / 8 * 8;
 
-        std::vector<DistanceMatrix*> distanceMatrices;
-        std::vector<unsigned> order;
+        if(subsampled_rows % 8 != 0)
+            throw std::invalid_argument("The number of subsampled rows must be a multiple of 8 (for transposition)");
 
-        distanceMatrices.resize(NB_GROUPS);
+        std::vector<unsigned> order;
         order.resize(COLUMNS);
 
         //Compute distance matrix
-        std::cout << "Transposing submatrix of reference matrix..." << std::endl;
-        const char* const transposed_matrix = get_transposed_matrix(mapped_file, HEADER, COLUMNS, ROW_LENGTH, NB_GROUPS, GROUPSIZE, subsampled_rows, distanceMatrices);
+        std::cout << "Transpose submatrix from reference submatrix '" << REFERENCE_MATRIX << "\'... ";
+        START_TIMER;
+        const char* const transposed_matrix = get_transposed_matrix(mapped_file, HEADER, ROW_LENGTH, subsampled_rows);
+        END_TIMER;
 
         //Approximate TSP path with double ended Nearest-Neighbor; compute order
-        std::cout << "Computing order..." << std::endl;
-        TSP_NN(transposed_matrix, distanceMatrices, subsampled_rows, order);
+        std::cout << "Computing order using TSP... " << std::endl;
+        START_TIMER;
+        TSP_NN(transposed_matrix, COLUMNS, GROUPSIZE, subsampled_rows, order);
+        END_TIMER;
 
         //Unmap reference matrix and close its file descriptor 
         munmap(mapped_file, FILE_SIZE);
@@ -390,10 +383,6 @@ namespace Reorder
 
         //Free transposed matrix
         delete[] transposed_matrix;
-
-        //Free distance matrices from memory
-        for(DistanceMatrix* m : distanceMatrices)
-            delete m;
         
         //Shift blank columns (when samples is not a multiple of 8) to their original location
         immutable_filling_columns_inplace(order, COLUMNS, COLUMNS-SAMPLES);
@@ -404,11 +393,11 @@ namespace Reorder
         write(fdorder, reinterpret_cast<const char*>(order.data()), sizeof(unsigned)*order.size());
         close(fdorder);
 
-
         //Reorder all matrices
         for(unsigned i = 0; i < MATRICES.size(); i++)
         {
-            std::cout << "\rReordering matrix " << (i+1) << "/" << MATRICES.size() << " ..." << std::flush;
+            std::cout << "Reordering matrix '" << MATRICES[i] << '\'' << (i+1) << "/" << MATRICES.size() << " ... ";
+            START_TIMER;
             fd = open(MATRICES[i], O_RDWR);
             mapped_file = (char*)mmap(nullptr, FILE_SIZE, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
 
@@ -420,6 +409,7 @@ namespace Reorder
             //Unmap file in memory and close file descriptor 
             munmap(mapped_file, FILE_SIZE);
             close(fd);
+            END_TIMER;
         }
 
         std::cout << std::endl;
@@ -454,17 +444,32 @@ namespace Reorder
         delete[] buffer;
     }
 
-    void TSP_NN(const char* const transposed_matrix, const std::vector<DistanceMatrix*>& DISTANCE_MATRICES, const std::size_t SUBSAMPLED_ROWS, std::vector<unsigned>& order)
+    void TSP_NN(const char* const transposed_matrix, const unsigned COLUMNS, const unsigned GROUPSIZE, const std::size_t SUBSAMPLED_ROWS, std::vector<unsigned>& order)
     {
+        unsigned last_group_size;
+        
+        //Number of group of columns
+        const unsigned NB_GROUPS = (COLUMNS+GROUPSIZE-1)/GROUPSIZE;
+
+        if(COLUMNS % GROUPSIZE == 0)
+            last_group_size = GROUPSIZE;
+        else
+            last_group_size = COLUMNS % GROUPSIZE;
+
         std::size_t offset = 0; //Offset for global order assignation
 
-        for(unsigned i = 0; i < DISTANCE_MATRICES.size(); ++i)
+        DistanceMatrix distanceMatrix(GROUPSIZE);
+        for(unsigned i = 0; i < NB_GROUPS-1; ++i)
         {
             //Find a suboptimal path minimizing the weight of edges and visiting each node once
-            build_double_end_NN(transposed_matrix, DISTANCE_MATRICES[i], SUBSAMPLED_ROWS, offset, order);
+            build_double_end_NN(transposed_matrix, distanceMatrix, SUBSAMPLED_ROWS, offset, order);
             
-            offset += DISTANCE_MATRICES[i]->width();
+            offset += GROUPSIZE;
+            distanceMatrix.reset(); //Clean distance matrix
         }
+
+        distanceMatrix.resize(last_group_size);
+        build_double_end_NN(transposed_matrix, distanceMatrix, SUBSAMPLED_ROWS, offset, order);
     }
 };
 

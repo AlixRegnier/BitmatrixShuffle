@@ -6,8 +6,6 @@ DistanceMatrix::DistanceMatrix(std::size_t size)
     resize(size);
 }
 
-#include <iostream>
-
 double DistanceMatrix::get(std::size_t x, std::size_t y) const
 {
     if(x == y)
@@ -45,4 +43,9 @@ std::size_t DistanceMatrix::index(std::size_t x, std::size_t y) const
         throw std::runtime_error("ERROR: Out of range");
 
     return i;
+}
+
+void DistanceMatrix::reset()
+{
+    std::fill(matrix.begin(), matrix.end(), NULL_DISTANCE);
 }

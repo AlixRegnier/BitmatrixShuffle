@@ -33,10 +33,10 @@ namespace Reorder
 
     
     //Build a path by taking closest vertex (from tail)
-    void build_NN(const char* const TRANSPOSED_MATRIX, DistanceMatrix * DISTANCE_MATRIX, const std::size_t SUBSAMPLED_ROWS, const std::size_t OFFSET, std::vector<unsigned>& order);
+    void build_NN(const char* const TRANSPOSED_MATRIX, DistanceMatrix& distanceMatrix, const std::size_t SUBSAMPLED_ROWS, const std::size_t OFFSET, std::vector<unsigned>& order);
 
     //Build a path by taking closest vertex (compare closest from tail and closest from head)
-    void build_double_end_NN(const char* const TRANSPOSED_MATRIX, DistanceMatrix * DISTANCE_MATRIX, const std::size_t SUBSAMPLED_ROWS, const std::size_t OFFSET, std::vector<unsigned>& order);
+    void build_double_end_NN(const char* const TRANSPOSED_MATRIX, DistanceMatrix& distanceMatrix, const std::size_t SUBSAMPLED_ROWS, const std::size_t OFFSET, std::vector<unsigned>& order);
     
     //Distance computation between two columns
     double columns_hamming_distance(const char* const TRANSPOSED_MATRIX, const std::size_t MAX_ROW, const unsigned COLUMN_A, const unsigned COLUMN_B);
@@ -48,7 +48,7 @@ namespace Reorder
     char get_bit_from_position(const char* const BYTES, const unsigned POSITION);
     
     //Precall of SSE bitmatrix transposition, return a new buffer (should be free from memory when transposed bitmatrix is no longer needed)
-    const char * const get_transposed_matrix(const char * const MAPPED_FILE, const unsigned HEADER, const unsigned COLUMNS, const unsigned ROW_LENGTH, const unsigned NB_GROUPS, const unsigned GROUPSIZE, const std::size_t SUBSAMPLEDROWS, std::vector<DistanceMatrix*>& distanceMatrices);
+    const char * const get_transposed_matrix(const char * const MAPPED_FILE, const unsigned HEADER, const unsigned ROW_LENGTH,  const std::size_t SUBSAMPLED_ROWS);
 
     //SSE hamming distance between two buffers
     size_t hamming_distance(const char* const BUFFER1, const char* const BUFFER2, const size_t LENGTH);
@@ -66,7 +66,7 @@ namespace Reorder
     void reorder_matrix(char* mapped_file, const unsigned HEADER, const unsigned COLUMNS, const unsigned ROW_LENGTH, const std::size_t NB_ROWS, const std::vector<unsigned>& ORDER);
 
     //Start multiple path TSP instances to be solved using Nearest-Neighbor
-    void TSP_NN(const char* const transposed_matrix, const std::vector<DistanceMatrix*>& DISTANCE_MATRICES, const std::size_t SUBSAMPLED_ROWS, std::vector<unsigned>& order);
+    void TSP_NN(const char* const transposed_matrix, const unsigned COLUMNS, const unsigned GROUPSIZE, const std::size_t SUBSAMPLED_ROWS, std::vector<unsigned>& order);
 };
 
 #endif

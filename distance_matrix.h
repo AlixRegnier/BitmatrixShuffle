@@ -16,6 +16,7 @@ class DistanceMatrix
         std::size_t width() const;
         double get(std::size_t x, std::size_t y) const;
         void set(std::size_t x, std::size_t y, double distance);
+        void reset();
     private:
         std::size_t index(std::size_t x, std::size_t y) const;
         std::vector<double> matrix;
