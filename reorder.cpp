@@ -220,17 +220,6 @@ namespace Reorder
         return nn;
     }
 
-
-    //Functions needed
-    char get_bit_from_position(const char * const BYTES, const unsigned POSITION)
-    {
-        //Equivalent instruction that is compiled to the same assembly code than second one
-        //return (bytes[position >> 3] >> (8 - (position % 8) - 1)) & (char)1;
-
-        return (BYTES[POSITION >> 3] >> (~POSITION & 0x7U)) & (char)1;
-    }
-
-
     const char* const get_transposed_matrix(const char * const MAPPED_FILE, const unsigned HEADER, const unsigned ROW_LENGTH, const std::size_t SUBSAMPLED_ROWS)
     {
         //Transposed buffer containing concatenated columns
@@ -413,35 +402,6 @@ namespace Reorder
         }
 
         std::cout << std::endl;
-    }
-
-    void permute_buffer_order(const char * const BUFFER, char * outBuffer, const unsigned * const ORDER, const unsigned ORDER_LENGTH)
-    {
-        //Permute bits within bytes of a buffer according to a given order
-        //order[i] tells that the position i has to store the bit at position order[i]
-
-        for(unsigned i = 0; i < ORDER_LENGTH; ++i)
-            outBuffer[i >> 3] = (outBuffer[i >> 3] << 1) | get_bit_from_position(BUFFER, ORDER[i]);
-    }
-
-    void reorder_matrix(char * mapped_file, const unsigned HEADER, const unsigned COLUMNS, const unsigned ROW_LENGTH, const std::size_t NB_ROWS, const std::vector<unsigned>& ORDER)
-    {
-        //Buffer to copy a row
-        char * buffer = new char[ROW_LENGTH];
-
-        std::size_t index = 0;
-
-        //Permutate columns
-        for(std::size_t i = 0; i < NB_ROWS; ++i)
-        {
-            std::memcpy(buffer, mapped_file+index+HEADER, ROW_LENGTH);
-            
-            //Permutate row bits
-            permute_buffer_order(buffer, mapped_file+index+HEADER, ORDER.data(), COLUMNS);
-            index += ROW_LENGTH;
-        }
-
-        delete[] buffer;
     }
 
     void TSP_NN(const char* const transposed_matrix, const unsigned COLUMNS, const unsigned GROUPSIZE, const std::size_t SUBSAMPLED_ROWS, std::vector<unsigned>& order)
