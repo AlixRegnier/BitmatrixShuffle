@@ -204,8 +204,6 @@ namespace Reorder
             order[i+OFFSET] = orderDeque[i] + OFFSET; //Add offset because columns are addressed by their global location
     }
 
-
-
     double columns_hamming_distance(const char* const transposed_matrix, const std::size_t MAX_ROW, const unsigned COLUMN_A, const unsigned COLUMN_B)
     {
         return 1.0*hamming_distance(transposed_matrix + (COLUMN_A)*(MAX_ROW/8), transposed_matrix + (COLUMN_B)*(MAX_ROW/8), MAX_ROW/8) / MAX_ROW;
@@ -355,7 +353,7 @@ namespace Reorder
         order.resize(COLUMNS);
 
         //Compute distance matrix
-        std::cout << "Transpose submatrix from reference submatrix '" << REFERENCE_MATRIX << "\'... ";
+        std::cout << "Transpose submatrix from reference submatrix '" << REFERENCE_MATRIX << "\' ... ";
         START_TIMER;
         const char* const transposed_matrix = get_transposed_matrix(mapped_file, HEADER, ROW_LENGTH, subsampled_rows);
         END_TIMER;
