@@ -60,7 +60,7 @@ namespace Reorder
             posix_madvise(mapped_file, FILE_SIZE, POSIX_MADV_SEQUENTIAL);
 
             //Reorder matrix columns
-            reorder_matrix(mapped_file, HEADER, COLUMNS, ROW_LENGTH, NB_ROWS, reversed_order);
+            reorder_matrix_columns(mapped_file, HEADER, COLUMNS, ROW_LENGTH, NB_ROWS, reversed_order);
                     
             //Unmap file in memory and close file descriptor 
             munmap(mapped_file, FILE_SIZE);

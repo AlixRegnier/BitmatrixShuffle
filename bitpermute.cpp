@@ -22,7 +22,7 @@ namespace Reorder
     }
 
     //Reorder matrix (bit-swapping on memory-mapped file)
-    void reorder_matrix(char * mapped_file, const unsigned HEADER, const unsigned COLUMNS, const unsigned ROW_LENGTH, const std::size_t NB_ROWS, const std::vector<unsigned>& ORDER)
+    void reorder_matrix_columns(char * mapped_file, const unsigned HEADER, const unsigned COLUMNS, const unsigned ROW_LENGTH, const std::size_t NB_ROWS, const std::vector<unsigned>& ORDER)
     {
         //Buffer to copy a row
         char * buffer = new char[ROW_LENGTH];
@@ -37,6 +37,48 @@ namespace Reorder
             //Swap row bits
             permute_buffer_order(buffer, mapped_file+index+HEADER, ORDER.data(), COLUMNS);
             index += ROW_LENGTH;
+        }
+
+        delete[] buffer;
+    }
+
+    void reorder_matrix_rows(char * mapped_file, const unsigned HEADER, const unsigned COLUMNS, const unsigned ROW_LENGTH, const std::size_t NB_ROWS, const std::vector<unsigned>& ORDER)
+    {
+        //Buffer to store a row
+        char * buffer = new char[ROW_LENGTH];
+
+        std::vector<unsigned> permutation_copy;
+        permutation_copy.assign(ORDER.begin(), ORDER.end());
+
+        //Permutate rows
+        for(unsigned i = 0; i < NB_ROWS; ++i)
+        {
+            if(permutation_copy[i] == i)
+                continue;
+
+            
+            char * i_ptr = mapped_file+HEADER+i*ROW_LENGTH;
+
+            //Save current element into buffer
+            std::memcpy(buffer, i_ptr, ROW_LENGTH);
+
+            //Cycle
+            unsigned j = i;
+            char * j_ptr = mapped_file+HEADER+j*ROW_LENGTH;
+            while(permutation_copy[j] != i)
+            {
+                unsigned next_j = permutation_copy[j];
+                char * next_j_ptr = mapped_file+HEADER+next_j*ROW_LENGTH;
+                
+                std::memcpy(j_ptr, next_j_ptr, ROW_LENGTH);
+                permutation_copy[j] = j;
+
+                j = next_j;
+                j_ptr = next_j_ptr;
+            }
+            
+            std::memcpy(j_ptr, buffer, ROW_LENGTH);
+            permutation_copy[j] = j;
         }
 
         delete[] buffer;

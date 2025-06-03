@@ -12,8 +12,11 @@ namespace Reorder
     //Swaps the bits of a buffer into another buffer according to given order
     void permute_buffer_order(const char* const BUFFER, char* outBuffer, const unsigned* const ORDER, const unsigned ORDER_LENGTH);
     
-    //Reorder matrix (bit-swapping on memory-mapped file)
-    void reorder_matrix(char* mapped_file, const unsigned HEADER, const unsigned COLUMNS, const unsigned ROW_LENGTH, const std::size_t NB_ROWS, const std::vector<unsigned>& ORDER);
+    //Reorder matrix columns (bit-swapping on memory-mapped file)
+    void reorder_matrix_columns(char* mapped_file, const unsigned HEADER, const unsigned COLUMNS, const unsigned ROW_LENGTH, const std::size_t NB_ROWS, const std::vector<unsigned>& ORDER);
+
+    //Reorder matrix rows (row-swapping on memory-mapped file)
+    void reorder_matrix_rows(char* mapped_file, const unsigned HEADER, const unsigned COLUMNS, const unsigned ROW_LENGTH, const std::size_t NB_ROWS, const std::vector<unsigned>& ORDER);
 };   
 
 #endif
