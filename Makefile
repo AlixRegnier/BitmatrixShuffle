@@ -14,14 +14,20 @@ distance_matrix: distance_matrix.cpp distance_matrix.h
 rng: rng.cpp rng.h
 	g++ $(FLAGS) $(CPPFLAG) -I. -c rng.cpp
 
-reorder: reorder.cpp reorder.h bitpermute rng distance_matrix fast_median vptree.h vptree_impl.h
-	g++ $(FLAGS) $(CPPFLAG) $(SIMD) -I. -o reorder reorder.cpp distance_matrix.o rng.o fast_median.o bitpermute.o
+reorder: reorder.cpp reorder.h bitpermute gray rng distance_matrix fast_median vptree.h vptree_impl.h
+	g++ $(FLAGS) $(CPPFLAG) $(SIMD) -I. -o reorder reorder.cpp distance_matrix.o rng.o fast_median.o bitpermute.o gray.o
 
 reverse_reorder: reverse_reorder.cpp bitpermute reverse_reorder.h
 	g++ $(FLAGS) $(CPPFLAG) $(SIMD) -I. -o reverse_reorder reverse_reorder.cpp bitpermute.o
 
 bitpermute: bitpermute.cpp bitpermute.h
 	g++ $(FLAGS) $(CPPFLAG) -I. -c bitpermute.cpp
+
+gray: gray.cpp gray.h
+	g++ $(FLAGS) $(CPPFLAG) -I. -c gray.cpp bitpacker.o
+
+bitpacker: bitpacker.cpp bitpacker.h
+	g++ $(FLAGS) $(CPPFLAG) -I. -c bitpacker.cpp
 	
 clean:
 	rm -rf *.o

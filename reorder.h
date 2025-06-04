@@ -26,6 +26,8 @@
 //Bit permutation
 #include <bitpermute.h>
 
+#include <gray.h>
+
 namespace Reorder 
 {
     struct

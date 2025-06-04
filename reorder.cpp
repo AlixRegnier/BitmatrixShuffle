@@ -304,16 +304,45 @@ namespace Reorder
         for(unsigned i = COLUMNS-8; i < COLUMNS+FILL-8; ++i)
             order[i] = i;
     }
+    
 
+    bool is_buffer_smaller(const uint8_t* BUFFER1, const uint8_t* BUFFER2, const unsigned LENGTH) 
+    {
+        if(BUFFER1 == nullptr || BUFFER2 == nullptr)
+            throw std::invalid_argument("Input pointers can't be null");
+
+        size_t i = 0;
+        for (; i + 16 <= LENGTH; i += 16) 
+        {
+            __m128i v1 = _mm_loadu_si128(reinterpret_cast<const __m128i*>(BUFFER1 + i));
+            __m128i v2 = _mm_loadu_si128(reinterpret_cast<const __m128i*>(BUFFER2 + i));
+            
+            __m128i eq = _mm_cmpeq_epi8(v1, v2);
+            int mask = _mm_movemask_epi8(eq);
+            
+            if (mask != 0xFFFF) {
+                int pos = __builtin_ctz(~mask);
+                return BUFFER1[i + pos] < BUFFER2[i + pos];
+            }
+        }
+        
+        // Handle remaining bytes
+        for (; i < LENGTH; ++i) 
+            if (BUFFER1[i] != BUFFER2[i])
+                return BUFFER1[i] < BUFFER2[i];
+        
+        return false;  // Buffers are equal, so BUFFER1 is not smaller
+    }
+    
     void launch(const char * const REFERENCE_MATRIX, const std::vector<char*>& MATRICES, const unsigned SAMPLES, const unsigned HEADER, const unsigned GROUPSIZE, std::size_t subsampled_rows, const char * const OUT_ORDER, const char * const OUT_ROW_ORDER)
     {
         DECLARE_TIMER;
 
         if(SAMPLES == 0)
-            throw std::runtime_error("SAMPLES can't be equal to 0");
+            throw std::invalid_argument("SAMPLES can't be equal to 0");
 
         if(MATRICES.size() == 0)
-            throw std::runtime_error("Got empty vector of matrix path");
+            throw std::invalid_argument("Got empty vector of matrix path");
         
         if(GROUPSIZE % 8 != 0)
             throw std::invalid_argument("The size of a group of columns must be a multiple of 8 (for transposition)");
@@ -340,7 +369,7 @@ namespace Reorder
         const std::size_t NB_ROWS = (FILE_SIZE - HEADER) / ROW_LENGTH;
 
         if(NB_ROWS < subsampled_rows)
-            throw std::runtime_error("Number of subsampled rows can't be greater to the number of rows in the binary matrix. Maybe one of the parameters is wrong ?");
+            throw std::invalid_argument("Number of subsampled rows can't be greater to the number of rows in the binary matrix. Maybe one of the parameters is wrong ?");
 
         //If defined to 0: Sample all matrix rows (at the number of rows must be a multiple of 8) 
         if(subsampled_rows == 0)
@@ -388,7 +417,7 @@ namespace Reorder
             fd = open(MATRICES[i], O_RDWR);
             mapped_file = (char*)mmap(nullptr, FILE_SIZE, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
 
-             //Tell system that data will be accessed sequentially
+            //Tell system that data will be accessed sequentially
             posix_madvise(mapped_file, FILE_SIZE, POSIX_MADV_SEQUENTIAL);
 
             //Reorder matrix columns
@@ -400,10 +429,45 @@ namespace Reorder
             std::vector<unsigned> row_order;
             row_order.resize(NB_ROWS);
 
-            //Compute matrix rows
-            std::cout << "Computing row order using TSP ..." << std::endl;
+            for(unsigned row = 0; row < NB_ROWS; ++row)
+                row_order[row] = row;
+
+            //Decode matrix rows like if they were Gray codes
+            std::cout << "Decode each rows ... ";
             START_TIMER;
-            TSP_NN(mapped_file, NB_ROWS, 16384, COLUMNS, row_order);
+            for(unsigned row = 0; row < NB_ROWS; ++row)
+            {
+                decodeGray(mapped_file+HEADER+row*ROW_LENGTH, ROW_LENGTH);
+            }
+            END_TIMER;
+
+            //Tell system that data will be accessed with random access //POSIX_MADV_RANDOM???
+            posix_madvise(mapped_file, FILE_SIZE, POSIX_MADV_NORMAL);
+
+            //Sort matrix rows lexicographically
+            std::cout << "Sort rows ... ";
+            START_TIMER;
+            std::sort(row_order.begin(), row_order.end(), [=](const unsigned a, const unsigned b) -> bool {
+                const std::uint8_t * a_ptr = reinterpret_cast<const std::uint8_t*>(mapped_file+HEADER+a*ROW_LENGTH);
+                const std::uint8_t * b_ptr = reinterpret_cast<const std::uint8_t*>(mapped_file+HEADER+b*ROW_LENGTH);
+                return is_buffer_smaller(a_ptr, b_ptr, ROW_LENGTH);
+            });
+            END_TIMER;
+
+            for(unsigned j = 0; j < NB_ROWS; ++j)
+                std::cout << row_order[j] << " ";
+            std::cout << std::endl;
+
+            //Tell system that data will be accessed sequentially
+            posix_madvise(mapped_file, FILE_SIZE, POSIX_MADV_SEQUENTIAL);
+
+            //Retrieve matrix rows back
+            std::cout << "Encode each rows ... ";
+            START_TIMER;
+            for(unsigned row = 0; row < NB_ROWS; ++row)
+            {
+                encodeGray(mapped_file+HEADER+row*ROW_LENGTH, ROW_LENGTH);
+            }
             END_TIMER;
 
             //Serialize row order
