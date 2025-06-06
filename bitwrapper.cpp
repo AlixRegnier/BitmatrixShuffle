@@ -1,31 +1,33 @@
-#include <bitpacker.h>
+#include <bitwrapper.h>
 
-BitPacker::BitPacker(char* buffer, unsigned size, bool copy) : size(size)
+BitWrapper::BitWrapper(char* buffer, unsigned size, bool copy) : BitWrapper(reinterpret_cast<unsigned char*>(buffer), size, copy)
+{
+
+}
+
+BitWrapper::BitWrapper(unsigned char* buffer, unsigned size, bool copy)
 {
     if(size == 0)
-        throw std::invalid_argument("BitPacker size can't be 0");
+        throw std::invalid_argument("BitWrapper size can't be 0");
 
-    if(copy)
-    {
-        bytes = new char[size];
-        std::memcpy(bytes, buffer, size);
-    
-    }
-    else
-        bytes = buffer;
-
-    
-    this->copy = copy;
+    this->size = size;
+    wrap(buffer, copy);
 }
 
-BitPacker::BitPacker(const BitPacker& other) : size(other.size)
+BitWrapper::BitWrapper(const BitWrapper& other)
 {
-    bytes = new char[other.size];
-    std::memcpy(bytes, other.bytes, other.size);
-    copy = true;
+    size = other.size;
+    wrap(other.bytes, true);
 }
 
-BitPacker::~BitPacker()
+BitWrapper& BitWrapper::operator=(const BitWrapper& other)
+{
+    size = other.size;
+    wrap(other.bytes, true);
+    return *this;
+}
+
+BitWrapper::~BitWrapper()
 {
     if(copy && bytes != nullptr)
         delete[] bytes;
@@ -33,12 +35,22 @@ BitPacker::~BitPacker()
     bytes = nullptr;
 }
 
-const char* const BitPacker::data() const
+const unsigned BitWrapper::get_size() const
+{
+    return size;
+}
+
+bool BitWrapper::is_copied() const
+{
+    return copy;
+}
+
+const char* const BitWrapper::data() const
 {
     return reinterpret_cast<const char* const>(bytes);
 }
 
-BitPacker& BitPacker::operator<<=(unsigned shift)
+BitWrapper& BitWrapper::operator<<=(unsigned shift)
 {
     unsigned big_shift = shift / 8;
 
@@ -55,17 +67,18 @@ BitPacker& BitPacker::operator<<=(unsigned shift)
 
     if(shift)
     {
-        for(unsigned i = 0; i + 1 < size; ++i)
+        for(unsigned i = 0; i + 1 < size-big_shift; ++i)
             bytes[i] = (bytes[i] << shift) | (bytes[i+1] >> (8-shift));
 
         //Handle last byte
-        bytes[size-1] <<= shift;
+        bytes[size-big_shift-1] <<= shift;
     }
+
 
     return *this;
 } 
 
-BitPacker& BitPacker::operator>>=(unsigned shift)
+BitWrapper& BitWrapper::operator>>=(unsigned shift)
 {
     unsigned big_shift = shift / 8;
 
@@ -88,39 +101,81 @@ BitPacker& BitPacker::operator>>=(unsigned shift)
 
     if(shift)
     {
-        for(unsigned i = size-1; i > 0; --i)
+        for(unsigned i = size-1; i > big_shift; --i)
             bytes[i] = (bytes[i-1] << (8-shift)) | (bytes[i] >> shift);
 
         //Handle first byte
-        bytes[0] >>= shift;
+        bytes[big_shift] >>= shift;
     }
+
 
     return *this;
 } 
 
-BitPacker BitPacker::operator>>(unsigned shift) const
+BitWrapper BitWrapper::operator>>(unsigned shift) const
 {
-    BitPacker result(*this);
+    BitWrapper result(*this);
     result >>= shift;
 
     return result;
 } 
 
-BitPacker BitPacker::operator<<(unsigned shift) const
+BitWrapper BitWrapper::operator<<(unsigned shift) const
 {
-    BitPacker result(*this);
+    BitWrapper result(*this);
     result <<= shift;
 
     return result;
 } 
 
+void BitWrapper::wrap(char* buffer, bool copy)
+{
+    wrap(reinterpret_cast<unsigned char*>(buffer), copy);
+}
 
-void BitPacker::fill(char value)
+void BitWrapper::wrap(unsigned char* buffer, bool copy)
+{
+    //If pointing to same memory location and wrapping same way, do nothing
+    if(buffer == bytes && copy == this->copy)
+        return;
+
+    if(this->copy)
+    {
+        if(copy)
+        {
+            if(bytes == nullptr)
+                bytes = new unsigned char[size];
+            
+            std::memcpy(bytes, buffer, size);
+        }
+        else
+        {
+            if(bytes != nullptr)
+                delete[] bytes;
+
+            bytes = buffer;
+        }
+    }
+    else
+    {
+        if(copy)
+        {
+            bytes = new unsigned char[size];
+            std::memcpy(bytes, buffer, size);
+        }
+        else
+            bytes = buffer;
+    }
+
+    this->copy = copy;
+}
+
+void BitWrapper::fill(unsigned char value)
 {
     std::memset(bytes, value, size);
 }
 
-char BitPacker::operator[](unsigned index) const
+char BitWrapper::operator[](unsigned index) const
 {
     if(index >= size)
         throw std::invalid_argument("Index out of range");
@@ -128,10 +183,10 @@ char BitPacker::operator[](unsigned index) const
     return bytes[index];
 }
 
-BitPacker& BitPacker::operator^=(const BitPacker& other)
+BitWrapper& BitWrapper::operator^=(const BitWrapper& other)
 {
     if(other.size != size)
-        throw std::invalid_argument("BitPacker instances don't have same size");
+        throw std::invalid_argument("BitWrapper instances don't have same size");
 
     for(unsigned i = 0; i < size; ++i)
         bytes[i] ^= other.bytes[i];
@@ -139,10 +194,10 @@ BitPacker& BitPacker::operator^=(const BitPacker& other)
     return *this;
 }
 
-BitPacker& BitPacker::operator&=(const BitPacker& other)
+BitWrapper& BitWrapper::operator&=(const BitWrapper& other)
 {
     if(other.size != size)
-        throw std::invalid_argument("BitPacker instances don't have same size");
+        throw std::invalid_argument("BitWrapper instances don't have same size");
 
     for(unsigned i = 0; i < size; ++i)
         bytes[i] &= other.bytes[i];
@@ -150,10 +205,10 @@ BitPacker& BitPacker::operator&=(const BitPacker& other)
     return *this;
 }
 
-BitPacker& BitPacker::operator|=(const BitPacker& other)
+BitWrapper& BitWrapper::operator|=(const BitWrapper& other)
 {
     if(other.size != size)
-        throw std::invalid_argument("BitPacker instances don't have same size");
+        throw std::invalid_argument("BitWrapper instances don't have same size");
 
     for(unsigned i = 0; i < size; ++i)
         bytes[i] |= other.bytes[i];
@@ -161,26 +216,32 @@ BitPacker& BitPacker::operator|=(const BitPacker& other)
     return *this;
 }
 
-BitPacker BitPacker::operator^(const BitPacker& other) const
+BitWrapper BitWrapper::operator^(const BitWrapper& other) const
 {
-    BitPacker result(*this);
+    BitWrapper result(*this);
     result ^= other;
 
     return result;
 } 
 
-BitPacker BitPacker::operator&(const BitPacker& other) const
+BitWrapper BitWrapper::operator&(const BitWrapper& other) const
 {
-    BitPacker result(*this);
+    BitWrapper result(*this);
     result &= other;
 
     return result;
 } 
 
-BitPacker BitPacker::operator|(const BitPacker& other) const
+BitWrapper BitWrapper::operator|(const BitWrapper& other) const
 {
-    BitPacker result(*this);
+    BitWrapper result(*this);
     result |= other;
 
     return result;
 } 
+
+void BitWrapper::toggleEndianness(unsigned char* buffer, const std::size_t SIZE)
+{
+    for(std::size_t i = 0; i < SIZE/2; ++i)
+        std::swap(buffer[i], buffer[SIZE-i-1]);
+}
