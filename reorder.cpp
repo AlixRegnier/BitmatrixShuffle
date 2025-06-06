@@ -432,12 +432,15 @@ namespace Reorder
             for(unsigned row = 0; row < NB_ROWS; ++row)
                 row_order[row] = row;
 
+            BitWrapper wrapped_buffer(mapped_file+HEADER, ROW_LENGTH, false); //Wrap row
+
             //Decode matrix rows like if they were Gray codes
-            std::cout << "Decode each rows ... ";
+            std::cout << "\tDecode each rows ... " << std::endl;
             START_TIMER;
             for(unsigned row = 0; row < NB_ROWS; ++row)
             {
-                decodeGray(mapped_file+HEADER+row*ROW_LENGTH, ROW_LENGTH);
+                wrapped_buffer.wrap(mapped_file+HEADER+row*ROW_LENGTH, false);
+                decodeGray(wrapped_buffer);
             }
             END_TIMER;
 
@@ -445,7 +448,7 @@ namespace Reorder
             posix_madvise(mapped_file, FILE_SIZE, POSIX_MADV_NORMAL);
 
             //Sort matrix rows lexicographically
-            std::cout << "Sort rows ... ";
+            std::cout << "\tSort rows ... ";
             START_TIMER;
             std::sort(row_order.begin(), row_order.end(), [=](const unsigned a, const unsigned b) -> bool {
                 const std::uint8_t * a_ptr = reinterpret_cast<const std::uint8_t*>(mapped_file+HEADER+a*ROW_LENGTH);
@@ -454,24 +457,34 @@ namespace Reorder
             });
             END_TIMER;
 
-            for(unsigned j = 0; j < NB_ROWS; ++j)
-                std::cout << row_order[j] << " ";
-            std::cout << std::endl;
+            //Check if sort worked
+            /*for(unsigned j = 0; j + 1 < NB_ROWS; ++j)
+            {
+                const std::uint8_t * a_ptr = reinterpret_cast<const std::uint8_t*>(mapped_file+HEADER+row_order[j]*ROW_LENGTH);
+                const std::uint8_t * b_ptr = reinterpret_cast<const std::uint8_t*>(mapped_file+HEADER+row_order[j+1]*ROW_LENGTH);
+                if(!is_buffer_smaller(a_ptr, b_ptr, ROW_LENGTH))
+                {
+                    for(unsigned k = 0; k < ROW_LENGTH; ++k)
+                        if(a_ptr[k] != b_ptr[k])
+                            throw std::runtime_error("NOT SORTED!");
+                }
+            }*/
 
             //Tell system that data will be accessed sequentially
             posix_madvise(mapped_file, FILE_SIZE, POSIX_MADV_SEQUENTIAL);
 
             //Retrieve matrix rows back
-            std::cout << "Encode each rows ... ";
+            std::cout << "\tEncode each rows ... ";
             START_TIMER;
             for(unsigned row = 0; row < NB_ROWS; ++row)
             {
-                encodeGray(mapped_file+HEADER+row*ROW_LENGTH, ROW_LENGTH);
+                wrapped_buffer.wrap(mapped_file+HEADER+row*ROW_LENGTH, false);
+                encodeGray(wrapped_buffer);
             }
             END_TIMER;
 
             //Serialize row order
-            std::cout << "Serializing row order ..." << std::endl;
+            std::cout << "\tSerializing row order ..." << std::endl;
             int fdorder = open(OUT_ROW_ORDER, O_WRONLY | O_CREAT | O_TRUNC, 0644);
             write(fdorder, reinterpret_cast<const char*>(row_order.data()), sizeof(unsigned)*row_order.size());
             close(fdorder);
