@@ -1,16 +1,16 @@
 #include <gray.h>
 #define IS_POWER_2(x) ((x & (x-1)) == 0)
 
-void encodeGray(BitWrapper& wrapped_buffer)
+void encodeGray(ByteWrapper& wrapped_buffer)
 {
     wrapped_buffer ^= (wrapped_buffer >> 1);
 }
 
-void decodeGray(BitWrapper& wrapped_buffer)
+void decodeGray(ByteWrapper& wrapped_buffer)
 {
-    const unsigned LENGTH = wrapped_buffer.get_size();
+    const unsigned LENGTH = wrapped_buffer.size();
 
-    //If mask.get_size() is a power of 2, decoding can be done more efficiently
+    //If buffer's size is a power of 2, decoding can be done more efficiently
     if(IS_POWER_2(LENGTH*8))
     {
         unsigned power = LENGTH*8;
@@ -45,7 +45,7 @@ void decodeGray(BitWrapper& wrapped_buffer)
     if(ITERATIONS == 0)
         return;
 
-    BitWrapper mask = wrapped_buffer; //Wrapper on copied <wrapped_buffer>
+    ByteWrapper mask = wrapped_buffer; //Wrapper on copied <wrapped_buffer>
 
     //Decode Gray code
     for(unsigned i = 0; i < ITERATIONS; ++i)

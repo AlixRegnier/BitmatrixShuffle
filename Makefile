@@ -1,4 +1,4 @@
-FLAGS=-Wall -pedantic -O3
+FLAGS=-Wall -pedantic -O3 -g
 CPPFLAG=-std=c++17
 SIMD=-msse2
 
@@ -14,8 +14,8 @@ distance_matrix: distance_matrix.cpp distance_matrix.h
 rng: rng.cpp rng.h
 	g++ $(FLAGS) $(CPPFLAG) -I. -c rng.cpp
 
-reorder: reorder.cpp reorder.h bitpermute gray bitwrapper rng distance_matrix fast_median vptree.h vptree_impl.h
-	g++ $(FLAGS) $(CPPFLAG) $(SIMD) -I. -o reorder reorder.cpp distance_matrix.o rng.o fast_median.o bitpermute.o gray.o bitwrapper.o
+reorder: reorder.cpp reorder.h bitpermute gray bytewrapper rng distance_matrix fast_median vptree.h vptree_impl.h
+	g++ $(FLAGS) $(CPPFLAG) $(SIMD) -I. -o reorder reorder.cpp distance_matrix.o rng.o fast_median.o bitpermute.o gray.o bytewrapper.o
 
 reverse_reorder: reverse_reorder.cpp bitpermute reverse_reorder.h
 	g++ $(FLAGS) $(CPPFLAG) $(SIMD) -I. -o reverse_reorder reverse_reorder.cpp bitpermute.o
@@ -23,11 +23,11 @@ reverse_reorder: reverse_reorder.cpp bitpermute reverse_reorder.h
 bitpermute: bitpermute.cpp bitpermute.h
 	g++ $(FLAGS) $(CPPFLAG) -I. -c bitpermute.cpp
 
-gray: bitwrapper gray.cpp gray.h
+gray: bytewrapper gray.cpp gray.h
 	g++ $(FLAGS) $(CPPFLAG) -I. -c gray.cpp
 
-bitwrapper: bitwrapper.cpp bitwrapper.h
-	g++ $(FLAGS) $(CPPFLAG) -I. -c bitwrapper.cpp
+bytewrapper: bytewrapper.cpp bytewrapper.h
+	g++ $(FLAGS) $(CPPFLAG) -I. -c bytewrapper.cpp
 	
 clean:
 	rm -rf *.o

@@ -19,13 +19,13 @@ namespace Reorder
     // i^7 may be if we consider this bit order: [0,1,2,3,4,5,6,7][8,9,10,11,...]...
     #define II (i^7) 
 
-    void __sse_trans(uint8_t const *inp, uint8_t *out, int nrows, int ncols)
+    void __sse_trans(std::uint8_t const *inp, std::uint8_t *out, int nrows, int ncols)
     {
         ssize_t rr, cc, i, h;
         union
         {
             __m128i x;
-            uint8_t b[16];
+            std::uint8_t b[16];
         } tmp;
 
         if(nrows % 8 != 0 || ncols % 8 != 0)
@@ -39,7 +39,7 @@ namespace Reorder
                 for ( i = 0; i < 16; ++i )
                     tmp.b[i] = INP(rr + II, cc);
                 for ( i = 8; --i >= 0; tmp.x = _mm_slli_epi64(tmp.x, 1))
-                    *(uint16_t *) &OUT(rr, cc + II) = _mm_movemask_epi8(tmp.x);
+                    *(std::uint16_t *) &OUT(rr, cc + II) = _mm_movemask_epi8(tmp.x);
             }
         }
     
@@ -53,7 +53,7 @@ namespace Reorder
         {
             for ( i = 0; i < 8; ++i )
             {
-                tmp.b[i] = h = *(uint16_t const *) &INP(rr + II, cc);
+                tmp.b[i] = h = *(std::uint16_t const *) &INP(rr + II, cc);
                 tmp.b[i + 8] = h >> 8;
             }
             for ( i = 8; --i >= 0; tmp.x = _mm_slli_epi64(tmp.x, 1))
@@ -241,8 +241,8 @@ namespace Reorder
         if (BUFFER1 == nullptr || BUFFER2 == nullptr)
             throw std::invalid_argument("Input pointers cannot be null");
 
-        size_t hammingDistance = 0;
-        size_t i = 0;
+        std::size_t hammingDistance = 0;
+        std::size_t i = 0;
     
         // Process 16 bytes at a time using SSE2
         for (; i + 16 <= LENGTH; i += 16) 
@@ -251,8 +251,8 @@ namespace Reorder
             __m128i xmm1 = _mm_loadu_si128(reinterpret_cast<const __m128i*>(BUFFER1 + i));
             __m128i xmm2 = _mm_loadu_si128(reinterpret_cast<const __m128i*>(BUFFER2 + i));
     
-            uint64_t* u64_1 = reinterpret_cast<uint64_t*>(&xmm1);
-            uint64_t* u64_2 = reinterpret_cast<uint64_t*>(&xmm2);
+            std::uint64_t* u64_1 = reinterpret_cast<std::uint64_t*>(&xmm1);
+            std::uint64_t* u64_2 = reinterpret_cast<std::uint64_t*>(&xmm2);
             
             hammingDistance += __builtin_popcountll(u64_1[0] ^ u64_2[0]);
             hammingDistance += __builtin_popcountll(u64_1[1] ^ u64_2[1]);
@@ -306,12 +306,12 @@ namespace Reorder
     }
     
 
-    bool is_buffer_smaller(const uint8_t* BUFFER1, const uint8_t* BUFFER2, const unsigned LENGTH) 
+    bool is_buffer_smaller(const std::uint8_t* BUFFER1, const std::uint8_t* BUFFER2, const unsigned LENGTH) 
     {
         if(BUFFER1 == nullptr || BUFFER2 == nullptr)
             throw std::invalid_argument("Input pointers can't be null");
 
-        size_t i = 0;
+        std::size_t i = 0;
         for (; i + 16 <= LENGTH; i += 16) 
         {
             __m128i v1 = _mm_loadu_si128(reinterpret_cast<const __m128i*>(BUFFER1 + i));
@@ -333,6 +333,28 @@ namespace Reorder
         
         return false;  // Buffers are equal, so BUFFER1 is not smaller
     }
+
+    bool is_equal(const std::uint8_t* BUFFER1, const std::uint8_t* BUFFER2, const unsigned LENGTH) 
+    {
+        if(BUFFER1 == nullptr || BUFFER2 == nullptr)
+            throw std::invalid_argument("Input pointers can't be null");
+        
+        // Handle remaining bytes
+        for (std::size_t i = 0; i < LENGTH; ++i) 
+            if (BUFFER1[i] != BUFFER2[i])
+                return false;
+        
+        return true;
+    }
+
+    bool is_buffer_null(const std::uint8_t* BUFFER, const unsigned LENGTH)
+    {
+        for(unsigned k = 0; k < LENGTH; ++k)
+            if(BUFFER[k] != std::uint8_t{0})
+                return false;
+        return true;
+    }
+    
     
     void launch(const char * const REFERENCE_MATRIX, const std::vector<char*>& MATRICES, const unsigned SAMPLES, const unsigned HEADER, const unsigned GROUPSIZE, std::size_t subsampled_rows, const char * const OUT_ORDER, const char * const OUT_ROW_ORDER)
     {
@@ -432,14 +454,14 @@ namespace Reorder
             for(unsigned row = 0; row < NB_ROWS; ++row)
                 row_order[row] = row;
 
-            BitWrapper wrapped_buffer(mapped_file+HEADER, ROW_LENGTH, false); //Wrap row
+            ByteWrapper wrapped_buffer(mapped_file+HEADER, ROW_LENGTH, false); //Wrap row
 
             //Decode matrix rows like if they were Gray codes
-            std::cout << "\tDecode each rows ... " << std::endl;
+            std::cout << "\tDecode each rows ... ";
             START_TIMER;
             for(unsigned row = 0; row < NB_ROWS; ++row)
             {
-                wrapped_buffer.wrap(mapped_file+HEADER+row*ROW_LENGTH, false);
+                wrapped_buffer.wrap(mapped_file+HEADER+row*ROW_LENGTH, ROW_LENGTH, false);
                 decodeGray(wrapped_buffer);
             }
             END_TIMER;
@@ -458,8 +480,12 @@ namespace Reorder
             END_TIMER;
 
             //Check if sort worked
-            /*for(unsigned j = 0; j + 1 < NB_ROWS; ++j)
+            std::vector<bool> check_uniq;
+            check_uniq.resize(NB_ROWS);
+
+            for(unsigned j = 0; j + 1 < NB_ROWS; ++j)
             {
+                check_uniq[row_order[j]] = true;
                 const std::uint8_t * a_ptr = reinterpret_cast<const std::uint8_t*>(mapped_file+HEADER+row_order[j]*ROW_LENGTH);
                 const std::uint8_t * b_ptr = reinterpret_cast<const std::uint8_t*>(mapped_file+HEADER+row_order[j+1]*ROW_LENGTH);
                 if(!is_buffer_smaller(a_ptr, b_ptr, ROW_LENGTH))
@@ -468,7 +494,24 @@ namespace Reorder
                         if(a_ptr[k] != b_ptr[k])
                             throw std::runtime_error("NOT SORTED!");
                 }
-            }*/
+            }
+
+            check_uniq[row_order[NB_ROWS-1]] = true;
+
+            unsigned long null_rows = 0UL;
+
+            for(unsigned j = 0; j < NB_ROWS; ++j)
+            {
+                if(!check_uniq[j])
+                    throw std::runtime_error("Missed row:" + std::to_string(j));
+
+                const std::uint8_t * ptr = reinterpret_cast<const std::uint8_t*>(mapped_file+HEADER+j*ROW_LENGTH);
+                
+                if(is_buffer_null(ptr, ROW_LENGTH))
+                    ++null_rows;
+            }
+
+
 
             //Tell system that data will be accessed sequentially
             posix_madvise(mapped_file, FILE_SIZE, POSIX_MADV_SEQUENTIAL);
@@ -478,10 +521,11 @@ namespace Reorder
             START_TIMER;
             for(unsigned row = 0; row < NB_ROWS; ++row)
             {
-                wrapped_buffer.wrap(mapped_file+HEADER+row*ROW_LENGTH, false);
+                wrapped_buffer.wrap(mapped_file+HEADER+row*ROW_LENGTH, ROW_LENGTH, false);
                 encodeGray(wrapped_buffer);
             }
             END_TIMER;
+
 
             //Serialize row order
             std::cout << "\tSerializing row order ..." << std::endl;
@@ -493,7 +537,20 @@ namespace Reorder
             std::cout << "\tReordering matrix rows ... ";
             START_TIMER;
             reorder_matrix_rows(mapped_file, HEADER, COLUMNS, ROW_LENGTH, NB_ROWS, row_order);
-            END_TIMER;
+            END_TIMER;       
+
+            unsigned long different_rows = 1;
+            for(unsigned row = 0; row + 1 < NB_ROWS; ++row)
+            {
+                const std::uint8_t * a_ptr = reinterpret_cast<const std::uint8_t*>(mapped_file+HEADER+row*ROW_LENGTH);
+                const std::uint8_t * b_ptr = reinterpret_cast<const std::uint8_t*>(mapped_file+HEADER+(row+1)*ROW_LENGTH);
+                
+                if(!is_equal(a_ptr, b_ptr, ROW_LENGTH))
+                    ++different_rows;
+            }
+
+            std::cout << "Different rows:\t" << different_rows << " / " << NB_ROWS << std::endl;
+            std::cout << "Null rows:\t" << null_rows << " / " << NB_ROWS << std::endl;
 
             //Unmap file in memory and close file descriptor 
             munmap(mapped_file, FILE_SIZE);

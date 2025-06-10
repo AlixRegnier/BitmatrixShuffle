@@ -4,10 +4,10 @@
 #include <cstdint>
 #include <stdexcept>
 #include <cstring>
-#include <bitwrapper.h>
+#include <bytewrapper.h>
 
-void encodeGray(BitWrapper& wrapped_buffer);
+void encodeGray(ByteWrapper& wrapped_buffer);
 
-void decodeGray(BitWrapper& wrapped_buffer);
+void decodeGray(ByteWrapper& wrapped_buffer);
 
 #endif
