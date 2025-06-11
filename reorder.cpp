@@ -305,7 +305,7 @@ namespace Reorder
             order[i] = i;
     }
 
-    void launch(const char * const REFERENCE_MATRIX, const std::vector<char*>& MATRICES, const unsigned SAMPLES, const unsigned HEADER, const unsigned GROUPSIZE, std::size_t subsampled_rows, const char * const OUT_ORDER, const char * const OUT_ROW_ORDER)
+    void launch(const char * const REFERENCE_MATRIX, const std::vector<char*>& MATRICES, const unsigned SAMPLES, const unsigned HEADER, const unsigned GROUPSIZE, std::size_t subsampled_rows, std::size_t subsampled_columns, const char * const OUT_ORDER, const char * const OUT_ROW_ORDER)
     {
         DECLARE_TIMER;
 
@@ -314,12 +314,12 @@ namespace Reorder
 
         if(MATRICES.size() == 0)
             throw std::runtime_error("Got empty vector of matrix path");
-        
+
         if(GROUPSIZE % 8 != 0)
             throw std::invalid_argument("The size of a group of columns must be a multiple of 8 (for transposition)");
 
         int fd = open(REFERENCE_MATRIX, O_RDONLY); //Open reference matrix in read-only
-        
+
         if(fd < 0)
             throw std::runtime_error("Failed to open a file descriptor on reference matrix");
 
@@ -342,12 +342,21 @@ namespace Reorder
         if(NB_ROWS < subsampled_rows)
             throw std::runtime_error("Number of subsampled rows can't be greater to the number of rows in the binary matrix. Maybe one of the parameters is wrong ?");
 
+        if(COLUMNS < subsampled_columns)
+            throw std::runtime_error("Number of subsampled columns can't be greater to the number of rows in the binary matrix. Maybe one of the parameters is wrong ?");
+
         //If defined to 0: Sample all matrix rows (at the number of rows must be a multiple of 8) 
         if(subsampled_rows == 0)
             subsampled_rows = NB_ROWS / 8 * 8;
 
+        if(subsampled_columns == 0)
+            subsampled_columns = COLUMNS / 8 * 8;
+
         if(subsampled_rows % 8 != 0)
             throw std::invalid_argument("The number of subsampled rows must be a multiple of 8 (for transposition)");
+
+        if(subsampled_columns % 8 != 0)
+            throw std::invalid_argument("The number of subsampled columns must be a multiple of 8 (for transposition)");
 
         std::vector<unsigned> order;
         order.resize(COLUMNS);
@@ -403,7 +412,7 @@ namespace Reorder
             //Compute matrix rows
             std::cout << "Computing row order using TSP ..." << std::endl;
             START_TIMER;
-            TSP_NN(mapped_file, NB_ROWS, 16384, COLUMNS, row_order);
+            TSP_NN(mapped_file, NB_ROWS, subsampled_columns, COLUMNS, row_order);
             END_TIMER;
 
             //Serialize row order
@@ -457,9 +466,9 @@ namespace Reorder
 
 int main(int argc, char ** argv)
 {
-    if(argc < 9)
+    if(argc < 10)
     {
-        std::cout << "Usage: reorder <ref_matrix> <samples> <header> <groupsize> <subsampled_rows> <out_column_order> <out_row_order> <matrices...>\n\nref_matrix\tMatrix that will be used to compute path TSP\nsamples\t\tThe number of samples in a matrix (will be set to the upper multiple of 8 if given number is not a multiple of 8)\nheader\t\tSize of a matrix header (49 for kmtricks)\ngroupsize\tGroup of columns to reorder (must be a multiple of 8)\nsubsampled_rows\tNumber of rows to be subsampled (30.000 should be suffisant)\nout_column_order\tBinary serialized column order computed from reference matrix\nout_row_order\tBinary serialized row order computed for each matrix\nmatrices\tAll matrices which columns will be reordered according to a same order (computed from reference matrix). Warning: all matrices must have the same size.\n\n";
+        std::cout << "Usage: reorder <ref_matrix> <samples> <header> <groupsize> <subsampled_rows> <subsampled_columns> <out_column_order> <out_row_order> <matrices...>\n\nref_matrix\t\tMatrix that will be used to compute path TSP\nsamples\t\t\tThe number of samples in a matrix (will be set to the upper multiple of 8 if given number is not a multiple of 8)\nheader\t\t\tSize of a matrix header (49 for kmtricks)\ngroupsize\t\tGroup of columns to reorder (must be a multiple of 8)\nsubsampled_rows\t\tNumber of rows to be subsampled (30.000 should be suffisant). 0 for all.\nsubsampled_columns\tNumber of columns to be subsampled. 0 for all.\nout_column_order\tBinary serialized column order computed from reference matrix\nout_row_order\t\tBinary serialized row order computed for each matrix\nmatrices\t\tAll matrices which columns will be reordered according to a same order (computed from reference matrix). Warning: all matrices must have the same size.\n\n";
         return 1;
     }
 
@@ -470,14 +479,15 @@ int main(int argc, char ** argv)
     unsigned header = (unsigned)atol(argv[3]);
     unsigned groupsize = (unsigned)atol(argv[4]);
     std::size_t subsampled_rows = (std::size_t)atoll(argv[5]);
-    char* out_order = argv[6];
-    char* out_row_order = argv[7];
+    std::size_t subsampled_columns = (std::size_t)atoll(argv[6]);
+    char* out_order = argv[7];
+    char* out_row_order = argv[8];
 
     std::vector<char*> matrices;
-    matrices.resize(argc - 8);
+    matrices.resize(argc - 9);
 
-    for(int i = 8; i < argc; ++i)
-        matrices[i-8] = argv[i];
+    for(int i = 9; i < argc; ++i)
+        matrices[i-9] = argv[i];
 
-    Reorder::launch(reference_matrix, matrices, samples, header, groupsize, subsampled_rows, out_order, out_row_order);
+    Reorder::launch(reference_matrix, matrices, samples, header, groupsize, subsampled_rows, subsampled_columns, out_order, out_row_order);
 }
