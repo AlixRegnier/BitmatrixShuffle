@@ -18,6 +18,12 @@ To use the program, you just need to run this command
 apptainer run <csv> <columns> <rows>
 ```
 
+Arg|Description
+--|--
+csv|CSV input file
+columns|Number of columns
+rows|Number of rows
+
 ## Output
 
 ```bash
