@@ -379,32 +379,15 @@ namespace Reorder
 
         //Free transposed matrix
         delete[] transposed_matrix;
-        
-        //Shift blank columns (when samples is not a multiple of 8) to their original location
-        immutable_filling_columns_inplace(order, COLUMNS, COLUMNS-SAMPLES);
-
-        //Serialize column order
-        std::cout << "Serializing column order ..." << std::endl;
-        int fdorder = open(OUT_ORDER, O_WRONLY | O_CREAT | O_TRUNC, 0644);
-        write(fdorder, reinterpret_cast<const char*>(order.data()), sizeof(unsigned)*order.size());
-        close(fdorder);
 
         //Reorder all matrices
         for(unsigned i = 0; i < MATRICES.size(); i++)
         {
-            std::cout << "Reordering matrix '" << MATRICES[i] << "' " << (i+1) << "/" << MATRICES.size() << " ... " << std::endl;
-
             fd = open(MATRICES[i], O_RDWR);
             mapped_file = (char*)mmap(nullptr, FILE_SIZE, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
 
              //Tell system that data will be accessed sequentially
             posix_madvise(mapped_file, FILE_SIZE, POSIX_MADV_SEQUENTIAL);
-
-            //Reorder matrix columns
-            std::cout << "\tReordering matrix columns ... ";
-            START_TIMER;
-            reorder_matrix_columns(mapped_file, HEADER, COLUMNS, ROW_LENGTH, NB_ROWS, order);
-            END_TIMER;
 
             std::vector<unsigned> row_order;
             row_order.resize(NB_ROWS);
@@ -415,17 +398,26 @@ namespace Reorder
             TSP_NN(mapped_file, NB_ROWS, subsampled_columns, COLUMNS, row_order);
             END_TIMER;
 
-            //Serialize row order
-            std::cout << "Serializing row order ..." << std::endl;
-            int fdorder = open(OUT_ROW_ORDER, O_WRONLY | O_CREAT | O_TRUNC, 0644);
-            write(fdorder, reinterpret_cast<const char*>(row_order.data()), sizeof(unsigned)*row_order.size());
+            unsigned r = 0;
+            while(r < order.size())
+            {
+                if(order[r] >= SAMPLES)
+                    order.erase(order.begin()+r);
+                else
+                    ++r;
+            }
+
+            //Serialize column order
+            std::cout << "Serializing column order ..." << std::endl;
+            int fdorder = open(OUT_ORDER, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+            write(fdorder, reinterpret_cast<const char*>(order.data()), sizeof(unsigned)*order.size());
             close(fdorder);
 
-            //Reorder matrix rows
-            std::cout << "\tReordering matrix rows ... ";
-            START_TIMER;
-            reorder_matrix_rows(mapped_file, HEADER, COLUMNS, ROW_LENGTH, NB_ROWS, row_order);
-            END_TIMER;
+            //Serialize row order
+            std::cout << "Serializing row order ..." << std::endl;
+            fdorder = open(OUT_ROW_ORDER, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+            write(fdorder, reinterpret_cast<const char*>(row_order.data()), sizeof(unsigned)*row_order.size());
+            close(fdorder);
 
             //Unmap file in memory and close file descriptor 
             munmap(mapped_file, FILE_SIZE);
@@ -453,22 +445,22 @@ namespace Reorder
         for(unsigned i = 0; i < NB_GROUPS-1; ++i)
         {
             //Find a suboptimal path minimizing the weight of edges and visiting each node once
-            build_double_end_NN(transposed_matrix, distanceMatrix, SUBSAMPLED_ROWS, offset, order);
+            build_NN(transposed_matrix, distanceMatrix, SUBSAMPLED_ROWS, offset, order);
             
             offset += GROUPSIZE;
             distanceMatrix.reset(); //Clean distance matrix
         }
 
         distanceMatrix.resize(last_group_size);
-        build_double_end_NN(transposed_matrix, distanceMatrix, SUBSAMPLED_ROWS, offset, order);
+        build_NN(transposed_matrix, distanceMatrix, SUBSAMPLED_ROWS, offset, order);
     }
 };
 
 int main(int argc, char ** argv)
 {
-    if(argc < 10)
+    if(argc != 10)
     {
-        std::cout << "Usage: reorder <ref_matrix> <samples> <header> <groupsize> <subsampled_rows> <subsampled_columns> <out_column_order> <out_row_order> <matrices...>\n\nref_matrix\t\tMatrix that will be used to compute path TSP\nsamples\t\t\tThe number of samples in a matrix (will be set to the upper multiple of 8 if given number is not a multiple of 8)\nheader\t\t\tSize of a matrix header (49 for kmtricks)\ngroupsize\t\tGroup of columns to reorder (must be a multiple of 8)\nsubsampled_rows\t\tNumber of rows to be subsampled (30.000 should be suffisant). 0 for all.\nsubsampled_columns\tNumber of columns to be subsampled. 0 for all.\nout_column_order\tBinary serialized column order computed from reference matrix\nout_row_order\t\tBinary serialized row order computed for each matrix\nmatrices\t\tAll matrices which columns will be reordered according to a same order (computed from reference matrix). Warning: all matrices must have the same size.\n\n";
+        std::cout << "Usage: reorder <ref_matrix> <samples> <header> <groupsize> <subsampled_rows> <subsampled_columns> <out_column_order> <out_row_order> <matrix>\n\nref_matrix\t\tMatrix that will be used to compute path TSP\nsamples\t\t\tThe number of samples in a matrix (will be set to the upper multiple of 8 if given number is not a multiple of 8)\nheader\t\t\tSize of a matrix header (49 for kmtricks)\ngroupsize\t\tGroup of columns to reorder (must be a multiple of 8)\nsubsampled_rows\t\tNumber of rows to be subsampled (30.000 should be suffisant). 0 for all.\nsubsampled_columns\tNumber of columns to be subsampled. 0 for all.\nout_column_order\tBinary serialized column order computed from reference matrix\nout_row_order\t\tBinary serialized row order computed for each matrix\nmatrix\t\tMatrix that will be reordered according to a same order (computed from reference matrix). Warning: all matrices must have the same size.\n\n";
         return 1;
     }
 

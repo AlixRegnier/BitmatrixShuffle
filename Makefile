@@ -1,5 +1,6 @@
 FLAGS=-Wall -pedantic -O3
 CPPFLAG=-std=c++17
+CFLAG=-std=c99
 SIMD=-msse2
 
 all: reorder reverse_reorder
@@ -17,11 +18,11 @@ rng.o: rng.cpp rng.h
 reorder: reorder.cpp reorder.h bitpermute.o rng.o distance_matrix.o fast_median.o vptree.h vptree_impl.h
 	g++ $(FLAGS) $(CPPFLAG) $(SIMD) -I. -o reorder reorder.cpp distance_matrix.o rng.o fast_median.o bitpermute.o
 
-reverse_reorder: reverse_reorder.cpp reverse_reorder.h bitpermute.o
-	g++ $(FLAGS) $(CPPFLAG) $(SIMD) -I. -o reverse_reorder reverse_reorder.cpp bitpermute.o
-
 bitpermute.o: bitpermute.cpp bitpermute.h
 	g++ $(FLAGS) $(CPPFLAG) -I. -c bitpermute.cpp
 	
+read_order: read_order.c
+	gcc $(FLAGS) $(CFLAG) -o read_order read_order.c
+
 clean:
-	rm -rf *.o
+	rm -rf *.o read_order reorder
