@@ -42,8 +42,6 @@ namespace Reorder
 
     void reorder_matrix_rows(char * mapped_file, const unsigned HEADER, const unsigned ROW_LENGTH, const std::size_t NB_ROWS, const std::vector<unsigned>& ORDER)
     {
-        unsigned __memcpycount = 0;
-
         //Buffer to store a row
         char * buffer = new char[ROW_LENGTH];
 
