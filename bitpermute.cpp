@@ -27,58 +27,54 @@ namespace Reorder
         //Buffer to copy a row
         char * buffer = new char[ROW_LENGTH];
 
-        std::size_t index = 0;
-
         //Swap columns in each rows
         for(std::size_t i = 0; i < NB_ROWS; ++i)
         {
-            std::memcpy(buffer, mapped_file+index+HEADER, ROW_LENGTH);
+            std::memcpy(buffer, GET_ROW_PTR(i), ROW_LENGTH);
             
             //Swap row bits
-            permute_buffer_order(buffer, mapped_file+index+HEADER, ORDER.data(), COLUMNS);
-            index += ROW_LENGTH;
+            permute_buffer_order(buffer, GET_ROW_PTR(i), ORDER.data(), COLUMNS);
         }
 
         delete[] buffer;
     }
 
-    void reorder_matrix_rows(char * mapped_file, const unsigned HEADER, const unsigned COLUMNS, const unsigned ROW_LENGTH, const std::size_t NB_ROWS, const std::vector<unsigned>& ORDER)
+    void reorder_matrix_rows(char * mapped_file, const unsigned HEADER, const unsigned ROW_LENGTH, const std::size_t NB_ROWS, const std::vector<unsigned>& ORDER)
     {
         //Buffer to store a row
         char * buffer = new char[ROW_LENGTH];
 
-        std::vector<unsigned> permutation_copy;
-        permutation_copy.assign(ORDER.begin(), ORDER.end());
-
-        //Permutate rows
-        for(unsigned i = 0; i < NB_ROWS; ++i)
+        std::vector<bool> visited;
+        visited.resize(ORDER.size());
+    
+        //Process each cycle in the permutation
+        for (std::size_t i = 0; i < ORDER.size(); ++i) 
         {
-            if(permutation_copy[i] == i)
+            if (visited[i]) 
                 continue;
-
             
-            char * i_ptr = mapped_file+HEADER+i*ROW_LENGTH;
-
-            //Save current element into buffer
-            std::memcpy(buffer, i_ptr, ROW_LENGTH);
-
-            //Cycle
-            unsigned j = i;
-            char * j_ptr = mapped_file+HEADER+j*ROW_LENGTH;
-            while(permutation_copy[j] != i)
+            // Start of a new cycle
+            std::size_t current = i;
+            std::memcpy(buffer, GET_ROW_PTR(i), ROW_LENGTH);
+            
+            //Follow the cycle
+            while (!visited[current]) 
             {
-                unsigned next_j = permutation_copy[j];
-                char * next_j_ptr = mapped_file+HEADER+next_j*ROW_LENGTH;
+                visited[current] = true;
+                std::size_t next = ORDER[current];
                 
-                std::memcpy(j_ptr, next_j_ptr, ROW_LENGTH);
-                permutation_copy[j] = j;
-
-                j = next_j;
-                j_ptr = next_j_ptr;
+                if (next == i) 
+                {
+                    //End of cycle - place the temp value
+                    std::memcpy(GET_ROW_PTR(current), buffer, ROW_LENGTH);
+                } 
+                else 
+                {
+                    // Move element and continue cycle
+                    std::memcpy(GET_ROW_PTR(current), GET_ROW_PTR(next), ROW_LENGTH);
+                    current = next;
+                }
             }
-            
-            std::memcpy(j_ptr, buffer, ROW_LENGTH);
-            permutation_copy[j] = j;
         }
 
         delete[] buffer;

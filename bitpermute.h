@@ -4,6 +4,8 @@
 #include <vector>
 #include <cstring>
 
+#define GET_ROW_PTR(x) (mapped_file+HEADER+((std::size_t)(x))*ROW_LENGTH)
+
 namespace Reorder
 {
     //Extract bit from a buffer of bytes (big-endian), result can only be 0x00 or 0x01
