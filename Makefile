@@ -3,7 +3,7 @@ CPPFLAG=-std=c++17
 CFLAG=-std=c99
 SIMD=-msse2
 
-all: reorder
+all: reorder read_order
 
 
 fast_median.o: fast_median.cpp fast_median.h
