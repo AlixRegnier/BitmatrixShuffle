@@ -2,7 +2,7 @@
 
 namespace Reorder 
 {
-    void launch(const unsigned SAMPLES, const unsigned HEADER, const char * const ORDER, const std::vector<char*>& MATRICES)
+    void launch(const std::vector<char*>& MATRICES, const unsigned SAMPLES, const unsigned HEADER, const char * const ORDER)
     {
         if(SAMPLES == 0)
             throw std::runtime_error("SAMPLES can't be equal to 0");
@@ -88,5 +88,5 @@ int main(int argc, char ** argv)
     for(int i = 4; i < argc; ++i)
         matrices[i-4] = argv[i];
 
-    Reorder::launch(samples, header, order, matrices);
+    Reorder::launch(matrices, samples, header, order);
 }
