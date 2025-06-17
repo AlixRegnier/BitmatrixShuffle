@@ -21,6 +21,34 @@ ByteWrapper& ByteWrapper::operator=(const ByteWrapper& other)
     return *this;
 }
 
+ByteWrapper ByteWrapper::ones(unsigned size)
+{
+    unsigned char * bytes = new unsigned char[size];
+    
+    //Set to false to prevent bytes to copy memory
+    ByteWrapper result(bytes, size, false);
+    result.fill((unsigned char)0xFF);
+
+    //Tell ByteWrapper instance that he needs to handle memory itself (delete)
+    result.copy = true;
+
+    return result;
+}
+
+ByteWrapper ByteWrapper::zeroes(unsigned size)
+{
+    unsigned char * bytes = new unsigned char[size];
+    
+    //Set to false to prevent bytes to copy memory
+    ByteWrapper result(bytes, size, false);
+    result.fill((unsigned char)0x0);
+
+    //Tell ByteWrapper instance that he needs to handle memory itself (delete)
+    result.copy = true;
+
+    return result;
+}
+
 ByteWrapper::~ByteWrapper()
 {
     if(copy && bytes != nullptr)
@@ -128,8 +156,11 @@ void ByteWrapper::wrap(char* buffer, unsigned size, bool copy)
 
 void ByteWrapper::wrap(unsigned char* buffer, unsigned size, bool copy)
 {
+    if(size == 0U)
+        throw std::runtime_error("Wrapped buffer can't be of size 0");
+
     //If pointing to same memory location and wrapping same way, do nothing
-    if(buffer == bytes && copy == this->copy)
+    if(buffer == bytes && copy == this->copy && size == _size)
         return;
 
     if(this->copy)
@@ -192,7 +223,7 @@ ByteWrapper& ByteWrapper::operator^=(const ByteWrapper& other)
 
     std::size_t i = 0;
     for(; i + 8 <= _size; i += 8)
-        ptr64[i << 3] ^= other_ptr64[i << 3];
+        ptr64[i >> 3] ^= other_ptr64[i >> 3];
 
     for(; i < _size; ++i)
         bytes[i] ^= other.bytes[i]; 
@@ -210,7 +241,7 @@ ByteWrapper& ByteWrapper::operator&=(const ByteWrapper& other)
 
     std::size_t i = 0;
     for(; i + 8 <= _size; i += 8)
-        ptr64[i << 3] &= other_ptr64[i << 3];
+        ptr64[i >> 3] &= other_ptr64[i >> 3];
 
     for(; i < _size; ++i)
         bytes[i] &= other.bytes[i]; 
@@ -228,7 +259,7 @@ ByteWrapper& ByteWrapper::operator|=(const ByteWrapper& other)
 
     std::size_t i = 0;
     for(; i + 8 <= _size; i += 8)
-        ptr64[i << 3] |= other_ptr64[i << 3];
+        ptr64[i >> 3] |= other_ptr64[i >> 3];
 
     for(; i < _size; ++i)
         bytes[i] |= other.bytes[i]; 
@@ -274,7 +305,7 @@ void ByteWrapper::flip()
 
     std::size_t i = 0;
     for(; i + 8 <= _size; i += 8)
-        ptr64[i << 3] = ~ptr64[i << 3];
+        ptr64[i >> 3] = ~ptr64[i >> 3];
 
     for(; i < _size; ++i)
         bytes[i] = ~bytes[i]; 
@@ -284,4 +315,96 @@ void ByteWrapper::toggleEndianness(unsigned char* buffer, const std::size_t SIZE
 {
     for(std::size_t i = 0; i < SIZE/2; ++i)
         std::swap(buffer[i], buffer[SIZE-i-1]);
+}
+
+bool ByteWrapper::operator<(const ByteWrapper& other) const
+{
+    return !operator>=(other);
+}
+
+bool ByteWrapper::operator<=(const ByteWrapper& other) const
+{
+    if(_size != other._size)
+        throw std::runtime_error("Comparison between wrapped bytes of diffent size is not handled yet");
+    
+    std::size_t i = 0;
+    for(; i < _size; ++i)
+        if(bytes[i] != other.bytes[i])
+            return bytes[i] < other.bytes[i];
+    
+    return true;
+}
+
+bool ByteWrapper::operator>(const ByteWrapper& other) const
+{
+    return !operator<=(other);
+}
+
+bool ByteWrapper::operator>=(const ByteWrapper& other) const
+{
+    if(_size != other._size)
+        throw std::runtime_error("Comparison between wrapped bytes of diffent size is not handled yet");
+
+    std::size_t i = 0;
+    for(; i < _size; ++i)
+        if(bytes[i] != other.bytes[i])
+            return bytes[i] > other.bytes[i];
+    
+    return true;
+}
+
+bool ByteWrapper::operator==(const ByteWrapper& other) const
+{
+    if(other._size != _size)
+        return false;
+
+    if(bytes == other.bytes)
+        return true;
+
+    std::size_t i = 0;
+    for(; i < _size; ++i)
+        if(bytes[i] != other.bytes[i])
+            return false; 
+
+    return true;
+}
+
+bool ByteWrapper::operator!=(const ByteWrapper& other) const
+{
+    return !operator==(other);
+}
+
+bool ByteWrapper::is_filled_of(unsigned char value) const
+{
+    std::uint64_t v64 = value;
+    v64 = (v64 << 56) | (v64 << 48) | (v64 << 40) | (v64 << 32) | (v64 << 24) | (v64 << 16) | (v64 << 8) | v64;
+
+    std::uint64_t* ptr64 = reinterpret_cast<std::uint64_t*>(bytes);
+
+    std::size_t i = 0;
+    for(; i + 8 <= _size; i += 8)
+        if(ptr64[i >> 3] != v64)
+            return false;
+
+    for(; i < _size; ++i)
+        if(bytes[i] != value)
+            return false; 
+
+    return true;
+}
+
+std::ostream& operator<<(std::ostream& o, const ByteWrapper& wrapper)
+{
+    unsigned char c;
+    for(std::size_t i = 0; i < wrapper.size(); ++i)
+    {
+        c = (unsigned char)wrapper[i];
+
+        for(unsigned char mask = (unsigned char)0x80; mask != (unsigned char)0x0; mask >>= 1)
+            o << (c & mask ? '1' : '0');
+        
+        o << ' ';
+    }
+
+    return o;
 }

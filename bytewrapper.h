@@ -4,6 +4,7 @@
 #include <cstdint>
 #include <stdexcept>
 #include <cstring>
+#include <iostream>
 
 class ByteWrapper
 {
@@ -16,6 +17,9 @@ class ByteWrapper
         ByteWrapper& operator=(const ByteWrapper& other);
         
         ~ByteWrapper();
+
+        static ByteWrapper ones(unsigned size);
+        static ByteWrapper zeroes(unsigned size);
 
         template <typename T>
         static ByteWrapper fromInteger(T x)
@@ -40,6 +44,7 @@ class ByteWrapper
 
         const unsigned size() const;
         bool is_copied() const;
+        bool is_filled_of(unsigned char value) const;
 
         //Shift operators
         ByteWrapper& operator<<=(unsigned shift);
@@ -56,14 +61,24 @@ class ByteWrapper
         ByteWrapper operator|(const ByteWrapper& other) const;
         ByteWrapper operator~() const;
 
+        //Logical operators
+        bool operator<(const ByteWrapper& other) const;
+        bool operator<=(const ByteWrapper& other) const;
+        bool operator>(const ByteWrapper& other) const;
+        bool operator>=(const ByteWrapper& other) const;
+        bool operator==(const ByteWrapper& other) const;
+        bool operator!=(const ByteWrapper& other) const;
+
         char operator[](unsigned index) const;
 
-    private:
-        unsigned _size; //See later for adding constness
         unsigned char* bytes = nullptr;
+    private:
+        unsigned _size;
         bool copy = true;
 
         static void toggleEndianness(unsigned char* buffer, const std::size_t SIZE);
 };
+
+std::ostream& operator<<(std::ostream& o, const ByteWrapper& wrapper);
 
 #endif

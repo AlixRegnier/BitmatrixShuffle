@@ -1,8 +1,8 @@
-FLAGS=-Wall -pedantic -O3 -g
+FLAGS=-Wall -pedantic -O3
 CPPFLAG=-std=c++17
 SIMD=-msse2
 
-all: reorder reverse_reorder
+all: reorder reverse_reorder reverse_rows
 
 
 fast_median: fast_median.cpp fast_median.h
@@ -20,10 +20,13 @@ reorder: reorder.cpp reorder.h bitpermute gray bytewrapper rng distance_matrix f
 reverse_reorder: reverse_reorder.cpp bitpermute reverse_reorder.h
 	g++ $(FLAGS) $(CPPFLAG) $(SIMD) -I. -o reverse_reorder reverse_reorder.cpp bitpermute.o
 
+reverse_rows: reverse_rows.cpp bitpermute
+	g++ $(FLAGS) $(CPPFLAG) -I. -o reverse_rows reverse_rows.cpp bitpermute.o
+
 bitpermute: bitpermute.cpp bitpermute.h
 	g++ $(FLAGS) $(CPPFLAG) -I. -c bitpermute.cpp
 
-gray: bytewrapper gray.cpp gray.h
+gray: gray.cpp gray.h
 	g++ $(FLAGS) $(CPPFLAG) -I. -c gray.cpp
 
 bytewrapper: bytewrapper.cpp bytewrapper.h

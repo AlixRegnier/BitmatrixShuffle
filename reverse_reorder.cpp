@@ -2,7 +2,7 @@
 
 namespace Reorder 
 {
-    void launch(const std::vector<char*>& MATRICES, const unsigned SAMPLES, const unsigned HEADER, const char * const ORDER)
+    void launch(const unsigned SAMPLES, const unsigned HEADER, const char * const ORDER, const std::vector<char*>& MATRICES)
     {
         if(SAMPLES == 0)
             throw std::runtime_error("SAMPLES can't be equal to 0");
@@ -74,7 +74,7 @@ int main(int argc, char ** argv)
 {
     if(argc < 5)
     {
-        std::cout << "Usage: reverse_reorder <samples> <header> <order> <matrices...>\n\nsamples\t\tThe number of samples in a matrix (will be set to the upper multiple of 8 if given number is not a multiple of 8)\nheader\t\tSize of a matrix header (49 for kmtricks)\norder\t\tBinary serialized order computed from reference matrix\nmatrices\tAll matrices which columns will be reordered according to a same order (reversed from serialized order). Warning: all matrices must have the same size.\n\n";
+        std::cout << "Usage: reverse_reorder <samples> <header> <column_order> <matrices...>\n\nsamples\t\tThe number of samples in a matrix (will be set to the upper multiple of 8 if given number is not a multiple of 8)\nheader\t\tSize of a matrix header (49 for kmtricks)\ncolumn_order\t\tBinary serialized column order computed from reference matrix\nmatrices\tAll matrices which columns will be reordered according to a same order (reversed from serialized order). Warning: all matrices must have the same size.\n\n";
         return 1;
     }
 
@@ -88,5 +88,5 @@ int main(int argc, char ** argv)
     for(int i = 4; i < argc; ++i)
         matrices[i-4] = argv[i];
 
-    Reorder::launch(matrices, samples, header, order);
+    Reorder::launch(samples, header, order, matrices);
 }
