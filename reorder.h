@@ -25,8 +25,7 @@
 
 //Bit permutation
 #include <bitpermute.h>
-
-#include <gray.h>
+#include <bytewrapper.h>
 
 namespace Reorder 
 {

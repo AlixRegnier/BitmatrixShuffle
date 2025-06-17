@@ -404,19 +404,6 @@ namespace Reorder
             for(std::size_t row = 0; row < NB_ROWS; ++row)
                 row_order[row] = row;
 
-
-            ByteWrapper wrapped_buffer(GET_ROW_PTR(0), ROW_LENGTH, false); //Wrap row
-
-            //Decode matrix rows like if they were Gray codes
-            std::cout << "\tDecode each rows ... ";
-            START_TIMER;
-            for(std::size_t row = 0; row < NB_ROWS; ++row)
-            {
-                wrapped_buffer.wrap(GET_ROW_PTR(row), ROW_LENGTH, false);
-                decodeGray(wrapped_buffer);
-            }
-            END_TIMER;
-
             //Tell system that data will be accessed with random access //POSIX_MADV_RANDOM???
             posix_madvise(mapped_file, FILE_SIZE, POSIX_MADV_NORMAL);
 
@@ -473,16 +460,6 @@ namespace Reorder
 
             //Tell system that data will be accessed sequentially
             posix_madvise(mapped_file, FILE_SIZE, POSIX_MADV_SEQUENTIAL);
-
-            //Retrieve matrix rows back
-            std::cout << "\tEncode each rows ... ";
-            START_TIMER;
-            for(std::size_t row = 0; row < NB_ROWS; ++row)
-            {
-                wrapped_buffer.wrap(GET_ROW_PTR(row), ROW_LENGTH, false);
-                encodeGray(wrapped_buffer);
-            }
-            END_TIMER;
 
             //Serialize row order
             std::cout << "\tSerializing row order ..." << std::endl;
