@@ -1,0 +1,43 @@
+Bootstrap: docker
+From: debian:latest
+
+%setup
+    mkdir -p ${SINGULARITY_ROOTFS}/build/
+    mkdir -p ${SINGULARITY_ROOTFS}/exec/
+
+%files
+    *.c /build/
+    *.cpp /build/
+    *.h /build/
+    Makefile /build/
+
+    csv_to_bin.py /exec/
+    get_permutation.sh /exec/
+
+%post
+    #Dependencies
+	apt update
+	apt upgrade -y
+	apt install -y build-essential make libtool
+	
+	#Tools
+	apt install -y time xxd nano bc git python3
+
+    cd /build
+    make
+
+    ln -s $PWD/reorder /exec/reorder
+    ln -s $PWD/read_order /exec/read_order
+
+
+%environment
+    export PATH="/exec:$PATH"
+
+%runscript
+    /exec/get_permutation.sh $@
+
+%labels
+	Author alix.regnier@inria.fr
+
+%help
+	This is a container used to compile BitmatrixShuffle and use some other programs
