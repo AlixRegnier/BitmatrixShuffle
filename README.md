@@ -15,14 +15,8 @@ apptainer build image.sif recipe.def
 To use the program, you just need to run this command
 
 ```bash
-apptainer run <csv> <columns> <rows>
+apptainer run <csv>
 ```
-
-Arg|Description
---|--
-csv|CSV input file
-columns|Number of columns
-rows|Number of rows
 
 ## Output
 

@@ -31,12 +31,11 @@ def main():
         a = f.readline() #ignore first row with headers
 
         for row in range(NB_ROWS):
+            a = f.readline().rstrip().split(',')
+            a = a[(len(a)-samples):]
 
             #Replace each symbol by 0 or 1 (c.f function binarize_symbol())
-            a = "".join(map(binarize_symbol, f.readline().rstrip().split(',')))
-
-            #Remove first row (header row)
-            a = a[1:]
+            a = "".join(map(binarize_symbol, a))
 
             if len(a) != samples:
                 raise Exception(f"Unexpected row size (row {row} is {len(a)} instead of {samples})")
