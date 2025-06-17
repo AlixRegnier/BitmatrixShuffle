@@ -1,8 +1,27 @@
 # BitmatrixShuffle
 
-TODO
+<i>Branch: <u>exp_marcus</u></i>
 
-## About
-## Installing  
-### Requirements  
-## How to include to your project
+## Build
+
+To build the recipe, you need to cd to same directory than  ``recipe.def``
+
+```bash
+apptainer build image.sif recipe.def
+```
+
+## Usage
+
+To use the program, you just need to run this command
+
+```bash
+apptainer run <csv> <columns> <rows>
+```
+
+## Output
+
+```bash
+├── file.csv     #File CSV
+├── file.col.txt #Column permutation
+└── file.row.txt #Row permutation
+```

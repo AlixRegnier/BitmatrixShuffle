@@ -17,12 +17,12 @@ echo ":: Call 'csv_to_bin.py'"
 python3 /exec/csv_to_bin.py $@ $name.bin
 
 echo ":: Call 'reorder'"
-reorder $name.bin $2 0 $columns 0 0 $name.col.bin $name.row.bin $name.bin
+/exec/reorder $name.bin $2 0 $columns 0 0 $name.col.bin $name.row.bin $name.bin
 
 echo ":: Call 'read_order'"
-read_order $2 $name.col.bin 1> $name.col.txt 
+/exec/read_order $2 $name.col.bin 1> $name.col.txt 
 echo ":: Call 'read_order'"
-read_order $3 $name.row.bin 1> $name.row.txt
+/exec/read_order $3 $name.row.bin 1> $name.row.txt
 
 echo ":: Delete tmp files"
 rm $name.col.bin $name.row.bin $name.bin
