@@ -2,7 +2,7 @@ FLAGS=-Wall -pedantic -O3
 CPPFLAG=-std=c++17
 SIMD=-msse2
 
-all: reorder reverse_reorder reverse_rows
+all: reorder reverse_reorder reverse_rows matrix_density
 
 
 fast_median.o: fast_median.cpp fast_median.h
@@ -28,6 +28,9 @@ bitpermute.o: bitpermute.cpp bitpermute.h
 
 bytewrapper.o: bytewrapper.cpp bytewrapper.h
 	g++ $(FLAGS) $(CPPFLAG) -I. -c bytewrapper.cpp
+
+matrix_density: matrix_density.cpp
+	g++ $(FLAGS) $(CPPFLAG) -I. -o matrix_density matrix_density.cpp
 	
 clean:
 	rm -rf *.o

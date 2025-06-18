@@ -126,6 +126,7 @@ namespace Reorder
             order[i+OFFSET] = path[i] + OFFSET; //Add offset because columns are addressed by their global location
     }
 
+    #include <cmath>
 
     //TSP path
     void build_double_end_NN(const char* const transposed_matrix, DistanceMatrix& distanceMatrix, const std::size_t SUBSAMPLED_ROWS, const std::size_t OFFSET, std::vector<unsigned>& order)
@@ -420,44 +421,6 @@ namespace Reorder
             }
             END_TIMER;
 
-            //Check if sort worked
-            /*std::vector<bool> check_uniq;
-            check_uniq.resize(NB_ROWS);
-
-            {
-                ByteWrapper wrapper_a(GET_ROW_PTR(0), ROW_LENGTH, false);
-                ByteWrapper wrapper_b(GET_ROW_PTR(0), ROW_LENGTH, false);
-
-                for(std::size_t j = 0; j + 1 < NB_ROWS; ++j)
-                {
-                    check_uniq[row_order[j]] = true;
-                    wrapper_a.wrap(GET_ROW_PTR(row_order[j]), ROW_LENGTH, false);
-                    wrapper_b.wrap(GET_ROW_PTR(row_order[j+1]), ROW_LENGTH, false);
-        
-                    if(wrapper_a > wrapper_b)
-                        throw std::runtime_error("NOT SORTED!");
-                }
-            }
-
-            check_uniq[row_order[NB_ROWS-1]] = true;
-
-            unsigned long null_rows = 0UL;
-
-            {
-                ByteWrapper wrapper(GET_ROW_PTR(0), ROW_LENGTH, false);
-
-                for(unsigned j = 0; j < NB_ROWS; ++j)
-                {
-                    if(!check_uniq[j])
-                        throw std::runtime_error("Missed row:" + std::to_string(j));
-
-                    wrapper.wrap(GET_ROW_PTR(j), ROW_LENGTH, false);
-                    
-                    if(wrapper.is_filled_of((unsigned char)0x0))
-                        ++null_rows;
-                }
-            }*/
-
             //Tell system that data will be accessed sequentially
             posix_madvise(mapped_file, FILE_SIZE, POSIX_MADV_SEQUENTIAL);
 
@@ -473,7 +436,7 @@ namespace Reorder
             reorder_matrix_rows(mapped_file, HEADER, ROW_LENGTH, NB_ROWS, row_order);
             END_TIMER;  
 
-            /*
+            //Get number of distinct rows
             unsigned long different_rows = 1;
             {
                 ByteWrapper wrapper_a(GET_ROW_PTR(0), ROW_LENGTH, false);
@@ -489,9 +452,40 @@ namespace Reorder
                 }
             }
 
+            //Get number of null rows
+            unsigned long null_rows = 0UL;
+            {
+                ByteWrapper wrapper(GET_ROW_PTR(0), ROW_LENGTH, false);
+
+                for(unsigned j = 0; j < NB_ROWS; ++j)
+                {
+                    wrapper.wrap(GET_ROW_PTR(j), ROW_LENGTH, false);
+                    
+                    if(wrapper.is_filled_of((unsigned char)0x00))
+                        ++null_rows;
+                    else
+                        break;
+                }
+            }
+
+            unsigned long full_rows = 0UL;
+            {
+                ByteWrapper wrapper(GET_ROW_PTR(0), ROW_LENGTH, false);
+
+                for(unsigned j = NB_ROWS-1; j > 0; --j)
+                {
+                    wrapper.wrap(GET_ROW_PTR(j), ROW_LENGTH, false);
+                    
+                    if(wrapper.is_filled_of((unsigned char)0xFF))
+                        ++full_rows;
+                    else
+                        break;
+                }
+            }
+
             std::cout << "Different rows:\t" << different_rows << " / " << NB_ROWS << std::endl;
             std::cout << "Null rows:\t" << null_rows << " / " << NB_ROWS << std::endl;
-            */
+            std::cout << "Full rows:\t" << full_rows << " / " << NB_ROWS << std::endl;
 
             //Unmap file in memory and close file descriptor 
             munmap(mapped_file, FILE_SIZE);
@@ -515,6 +509,15 @@ namespace Reorder
 
         std::size_t offset = 0; //Offset for global order assignation
 
+
+
+        double consecutive_distance_mean_after = 0.0;
+        double consecutive_distance_stdev_after = 0.0;
+        double consecutive_distance_mean_before = 0.0;
+        double consecutive_distance_stdev_before = 0.0;
+        //double min_distance = -1.0;
+        //double max_distance = -1.0;
+
         DistanceMatrix distanceMatrix(GROUPSIZE);
         for(unsigned i = 0; i < NB_GROUPS-1; ++i)
         {
@@ -527,6 +530,60 @@ namespace Reorder
 
         distanceMatrix.resize(last_group_size);
         build_double_end_NN(transposed_matrix, distanceMatrix, SUBSAMPLED_ROWS, offset, order);
+
+        DECLARE_TIMER;
+        std::cout << "Mean and RMSD computation ... " << std::flush;
+        START_TIMER;
+        for(unsigned i = 0; i + 1 < COLUMNS; ++i)
+        {
+            double d_before = columns_hamming_distance(transposed_matrix, SUBSAMPLED_ROWS, i, i+1);
+            double d_after = columns_hamming_distance(transposed_matrix, SUBSAMPLED_ROWS, order[i], order[i+1]);
+
+            /*if(min_distance == -1.0 || d_before < min_distance)
+                min_distance = d_before;
+        
+            if(min_distance == -1.0 || d_after < min_distance)
+                min_distance = d_after;
+
+            if(max_distance == -1.0 || d_before > max_distance)
+                max_distance = d_before;
+
+            if(max_distance == -1.0 || d_after > max_distance)
+                max_distance = d_after;*/
+
+            consecutive_distance_mean_before += d_before;
+            consecutive_distance_mean_after += d_after;
+        }
+
+        consecutive_distance_mean_before /= COLUMNS-1;
+        consecutive_distance_mean_after /= COLUMNS-1;
+
+        for(unsigned i = 0; i + 1 < COLUMNS; ++i)
+        {
+            double d_before = columns_hamming_distance(transposed_matrix, SUBSAMPLED_ROWS, i, i+1);
+            double d_after = columns_hamming_distance(transposed_matrix, SUBSAMPLED_ROWS, order[i], order[i+1]);
+            
+
+            double t_before = d_before - consecutive_distance_mean_before;
+            double t_after = d_after - consecutive_distance_mean_after;
+            consecutive_distance_stdev_before += t_before * t_before;
+            consecutive_distance_stdev_after += t_after * t_after;
+        }
+
+        consecutive_distance_stdev_before /= COLUMNS-1;
+        consecutive_distance_stdev_after /= COLUMNS-1;
+
+        //stdev (= stdev/(max-min))
+        consecutive_distance_stdev_before = std::sqrt(consecutive_distance_stdev_before);  // / std::abs(max_distance - min_distance);
+        consecutive_distance_stdev_after = std::sqrt(consecutive_distance_stdev_after); // / std::abs(max_distance - min_distance);
+
+
+        std::cout << "consecutive_distance_mean_before=" << consecutive_distance_mean_before << std::endl;
+        std::cout << "consecutive_distance_mean_after=" << consecutive_distance_mean_after << std::endl;
+        std::cout << "consecutive_distance_stdev_before=" << consecutive_distance_stdev_before << std::endl;
+        std::cout << "consecutive_distance_stdev_after=" << consecutive_distance_stdev_after << std::endl;
+
+        END_TIMER;
     }
 };
 
