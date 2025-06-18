@@ -1,4 +1,5 @@
 #include <bitpermute.h>
+#include <bytewrapper.h>
 
 namespace Reorder
 {
@@ -22,21 +23,59 @@ namespace Reorder
     }
 
     //Reorder matrix (bit-swapping on memory-mapped file)
-    void reorder_matrix(char * mapped_file, const unsigned HEADER, const unsigned COLUMNS, const unsigned ROW_LENGTH, const std::size_t NB_ROWS, const std::vector<unsigned>& ORDER)
+    void reorder_matrix_columns(char * mapped_file, const unsigned HEADER, const unsigned COLUMNS, const unsigned ROW_LENGTH, const std::size_t NB_ROWS, const std::vector<unsigned>& ORDER)
     {
         //Buffer to copy a row
         char * buffer = new char[ROW_LENGTH];
 
-        std::size_t index = 0;
-
         //Swap columns in each rows
         for(std::size_t i = 0; i < NB_ROWS; ++i)
         {
-            std::memcpy(buffer, mapped_file+index+HEADER, ROW_LENGTH);
+            std::memcpy(buffer, GET_ROW_PTR(i), ROW_LENGTH);
             
             //Swap row bits
-            permute_buffer_order(buffer, mapped_file+index+HEADER, ORDER.data(), COLUMNS);
-            index += ROW_LENGTH;
+            permute_buffer_order(buffer, GET_ROW_PTR(i), ORDER.data(), COLUMNS);
+        }
+
+        delete[] buffer;
+    }
+
+    void reorder_matrix_rows(char * mapped_file, const unsigned HEADER, const unsigned ROW_LENGTH, const std::size_t NB_ROWS, const std::vector<unsigned>& ORDER)
+    {
+        //Buffer to store a row
+        char * buffer = new char[ROW_LENGTH];
+
+        std::vector<bool> visited;
+        visited.resize(ORDER.size());
+    
+        //Process each cycle in the permutation
+        for (std::size_t i = 0; i < ORDER.size(); ++i) 
+        {
+            if (visited[i]) 
+                continue;
+            
+            // Start of a new cycle
+            std::size_t current = i;
+            std::memcpy(buffer, GET_ROW_PTR(i), ROW_LENGTH);
+            
+            //Follow the cycle
+            while (!visited[current]) 
+            {
+                visited[current] = true;
+                std::size_t next = ORDER[current];
+                
+                if (next == i) 
+                {
+                    //End of cycle - place the temp value
+                    std::memcpy(GET_ROW_PTR(current), buffer, ROW_LENGTH);
+                } 
+                else 
+                {
+                    // Move element and continue cycle
+                    std::memcpy(GET_ROW_PTR(current), GET_ROW_PTR(next), ROW_LENGTH);
+                    current = next;
+                }
+            }
         }
 
         delete[] buffer;

@@ -60,7 +60,7 @@ namespace Reorder
             posix_madvise(mapped_file, FILE_SIZE, POSIX_MADV_SEQUENTIAL);
 
             //Reorder matrix columns
-            reorder_matrix(mapped_file, HEADER, COLUMNS, ROW_LENGTH, NB_ROWS, reversed_order);
+            reorder_matrix_columns(mapped_file, HEADER, COLUMNS, ROW_LENGTH, NB_ROWS, reversed_order);
                     
             //Unmap file in memory and close file descriptor 
             munmap(mapped_file, FILE_SIZE);
@@ -74,7 +74,7 @@ int main(int argc, char ** argv)
 {
     if(argc < 5)
     {
-        std::cout << "Usage: reverse_reorder <samples> <header> <order> <matrices...>\n\nsamples\t\tThe number of samples in a matrix (will be set to the upper multiple of 8 if given number is not a multiple of 8)\nheader\t\tSize of a matrix header (49 for kmtricks)\norder\t\tBinary serialized order computed from reference matrix\nmatrices\tAll matrices which columns will be reordered according to a same order (reversed from serialized order). Warning: all matrices must have the same size.\n\n";
+        std::cout << "Usage: reverse_reorder <samples> <header> <column_order> <matrices...>\n\nsamples\t\tThe number of samples in a matrix (will be set to the upper multiple of 8 if given number is not a multiple of 8)\nheader\t\tSize of a matrix header (49 for kmtricks)\ncolumn_order\t\tBinary serialized column order computed from reference matrix\nmatrices\tAll matrices which columns will be reordered according to a same order (reversed from serialized order). Warning: all matrices must have the same size.\n\n";
         return 1;
     }
 
