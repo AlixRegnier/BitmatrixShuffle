@@ -9,6 +9,7 @@
                   __integral_time = static_cast<std::size_t>(std::chrono::duration_cast<std::chrono::milliseconds>(__stop_timer - __start_timer).count()); \
                   std::cout << std::setprecision(3) << (__integral_time / 1000.0) << "s" << std::endl
 
+
 namespace Reorder 
 {
     // from https://mischasan.wordpress.com/2011/10/03/the-full-sse2-bit-matrix-transpose-routine/
@@ -236,7 +237,7 @@ namespace Reorder
     }
 
     //SSE2 implementation of Hamming distance
-    size_t hamming_distance(const char* const BUFFER1, const char* const BUFFER2, const size_t LENGTH) 
+    /*size_t hamming_distance(const char* const BUFFER1, const char* const BUFFER2, const size_t LENGTH) 
     {
         if (BUFFER1 == nullptr || BUFFER2 == nullptr)
             throw std::invalid_argument("Input pointers cannot be null");
@@ -256,6 +257,41 @@ namespace Reorder
             
             hammingDistance += __builtin_popcountll(u64_1[0] ^ u64_2[0]);
             hammingDistance += __builtin_popcountll(u64_1[1] ^ u64_2[1]);
+        }
+    
+        // Handle remaining bytes
+        for (; i < LENGTH; ++i) 
+        {
+            unsigned char x = BUFFER1[i] ^ BUFFER2[i];
+            hammingDistance += __builtin_popcount(x);
+        }
+    
+        return hammingDistance;
+    }*/
+
+    //AVX2 implementation of Hamming distance
+    size_t hamming_distance(const char* const BUFFER1, const char* const BUFFER2, const size_t LENGTH) 
+    {
+        if (BUFFER1 == nullptr || BUFFER2 == nullptr)
+            throw std::invalid_argument("Input pointers cannot be null");
+
+        std::size_t hammingDistance = 0;
+        std::size_t i = 0;
+    
+        // Process 32 bytes at a time using AVX2
+        for (; i + 32 <= LENGTH; i += 32) 
+        {
+            // Load 32 bytes from each pointer
+            __m256i a = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(BUFFER1 + i));
+            __m256i b = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(BUFFER2 + i));
+            __m256i c = _mm256_xor_si256(a, b);
+
+            std::uint64_t* u64_c = reinterpret_cast<std::uint64_t*>(&c);
+            
+            hammingDistance += __builtin_popcountll(u64_c[0]);
+            hammingDistance += __builtin_popcountll(u64_c[1]);
+            hammingDistance += __builtin_popcountll(u64_c[2]);
+            hammingDistance += __builtin_popcountll(u64_c[3]);
         }
     
         // Handle remaining bytes
@@ -304,9 +340,8 @@ namespace Reorder
         for(unsigned i = COLUMNS-8; i < COLUMNS+FILL-8; ++i)
             order[i] = i;
     }
-
     
-    void launch(const char * const REFERENCE_MATRIX, const std::vector<char*>& MATRICES, const unsigned SAMPLES, const unsigned HEADER, const unsigned GROUPSIZE, std::size_t subsampled_rows, const char * const OUT_ORDER, const char * const OUT_ROW_ORDER)
+    void launch(const char * const REFERENCE_MATRIX, const std::vector<char*>& MATRICES, const unsigned SAMPLES, const unsigned HEADER, const unsigned GROUPSIZE, std::size_t subsampled_rows, const char * const OUT_ORDER)
     {
         DECLARE_TIMER;
 
@@ -374,7 +409,7 @@ namespace Reorder
         
         //Shift blank columns (when samples is not a multiple of 8) to their original location
         immutable_filling_columns_inplace(order, COLUMNS, COLUMNS-SAMPLES);
-
+        
         //Serialize column order
         std::cout << "Serializing column order ..." << std::endl;
         int fdorder = open(OUT_ORDER, O_WRONLY | O_CREAT | O_TRUNC, 0644);
@@ -397,101 +432,6 @@ namespace Reorder
             START_TIMER;
             reorder_matrix_columns(mapped_file, HEADER, COLUMNS, ROW_LENGTH, NB_ROWS, order);
             END_TIMER;
-            
-            std::vector<unsigned> row_order;
-            row_order.resize(NB_ROWS);
-
-            for(std::size_t row = 0; row < NB_ROWS; ++row)
-                row_order[row] = row;
-
-            //Tell system that data will be accessed with random access //POSIX_MADV_RANDOM???
-            posix_madvise(mapped_file, FILE_SIZE, POSIX_MADV_NORMAL);
-
-            //Sort matrix rows lexicographically
-            std::cout << "\tSort rows ... ";
-            START_TIMER;
-            {
-                std::sort(row_order.begin(), row_order.end(), [mapped_file,ROW_LENGTH,HEADER](const unsigned a, const unsigned b) -> bool {
-                    ByteWrapper wrapper_a(GET_ROW_PTR(a), ROW_LENGTH, false);
-                    ByteWrapper wrapper_b(GET_ROW_PTR(b), ROW_LENGTH, false);
-
-                    return wrapper_a < wrapper_b;
-                });
-            }
-            END_TIMER;
-
-            //Check if sort worked
-            /*std::vector<bool> check_uniq;
-            check_uniq.resize(NB_ROWS);
-
-            {
-                ByteWrapper wrapper_a(GET_ROW_PTR(0), ROW_LENGTH, false);
-                ByteWrapper wrapper_b(GET_ROW_PTR(0), ROW_LENGTH, false);
-
-                for(std::size_t j = 0; j + 1 < NB_ROWS; ++j)
-                {
-                    check_uniq[row_order[j]] = true;
-                    wrapper_a.wrap(GET_ROW_PTR(row_order[j]), ROW_LENGTH, false);
-                    wrapper_b.wrap(GET_ROW_PTR(row_order[j+1]), ROW_LENGTH, false);
-        
-                    if(wrapper_a > wrapper_b)
-                        throw std::runtime_error("NOT SORTED!");
-                }
-            }
-
-            check_uniq[row_order[NB_ROWS-1]] = true;
-
-            unsigned long null_rows = 0UL;
-
-            {
-                ByteWrapper wrapper(GET_ROW_PTR(0), ROW_LENGTH, false);
-
-                for(unsigned j = 0; j < NB_ROWS; ++j)
-                {
-                    if(!check_uniq[j])
-                        throw std::runtime_error("Missed row:" + std::to_string(j));
-
-                    wrapper.wrap(GET_ROW_PTR(j), ROW_LENGTH, false);
-                    
-                    if(wrapper.is_filled_of((unsigned char)0x0))
-                        ++null_rows;
-                }
-            }*/
-
-            //Tell system that data will be accessed sequentially
-            posix_madvise(mapped_file, FILE_SIZE, POSIX_MADV_SEQUENTIAL);
-
-            //Serialize row order
-            std::cout << "\tSerializing row order ..." << std::endl;
-            int fdorder = open(OUT_ROW_ORDER, O_WRONLY | O_CREAT | O_TRUNC, 0644);
-            write(fdorder, reinterpret_cast<const char*>(row_order.data()), sizeof(unsigned)*row_order.size());
-            close(fdorder);
-
-            //Reorder matrix rows
-            std::cout << "\tReordering matrix rows ... ";
-            START_TIMER;
-            reorder_matrix_rows(mapped_file, HEADER, ROW_LENGTH, NB_ROWS, row_order);
-            END_TIMER;  
-
-            /*
-            unsigned long different_rows = 1;
-            {
-                ByteWrapper wrapper_a(GET_ROW_PTR(0), ROW_LENGTH, false);
-                ByteWrapper wrapper_b(GET_ROW_PTR(0), ROW_LENGTH, false);
-
-                for(std::size_t row = 0; row + 1 < NB_ROWS; ++row)
-                {
-                    wrapper_a.wrap(GET_ROW_PTR(row), ROW_LENGTH, false);
-                    wrapper_b.wrap(GET_ROW_PTR(row+1), ROW_LENGTH, false);
-                    
-                    if(wrapper_a != wrapper_b)
-                        ++different_rows;
-                }
-            }
-
-            std::cout << "Different rows:\t" << different_rows << " / " << NB_ROWS << std::endl;
-            std::cout << "Null rows:\t" << null_rows << " / " << NB_ROWS << std::endl;
-            */
 
             //Unmap file in memory and close file descriptor 
             munmap(mapped_file, FILE_SIZE);
@@ -532,9 +472,9 @@ namespace Reorder
 
 int main(int argc, char ** argv)
 {
-    if(argc < 9)
+    if(argc < 8)
     {
-        std::cout << "Usage: reorder <ref_matrix> <samples> <header> <groupsize> <subsampled_rows> <out_column_order> <out_row_order> <matrices...>\n\nref_matrix\t\tMatrix that will be used to compute path TSP\nsamples\t\t\tThe number of samples in a matrix (will be set to the upper multiple of 8 if given number is not a multiple of 8)\nheader\t\t\tSize of a matrix header (49 for kmtricks)\ngroupsize\t\tGroup of columns to reorder (must be a multiple of 8)\nsubsampled_rows\t\tNumber of rows to be subsampled (30.000 should be suffisant). 0 for all.\nout_column_order\tBinary serialized column order computed from reference matrix\nout_row_order\t\tBinary serialized row order computed for each matrix\nmatrices\t\tAll matrices which columns will be reordered according to a same order (computed from reference matrix).\n\t\t\tWarning: all matrices must have the same size.\n\n";
+        std::cout << "Usage: reorder <ref_matrix> <samples> <header> <groupsize> <subsampled_rows> <out_column_order> <matrices...>\n\nref_matrix\t\tMatrix that will be used to compute path TSP\nsamples\t\t\tThe number of samples in a matrix (will be set to the upper multiple of 8 if given number is not a multiple of 8)\nheader\t\t\tSize of a matrix header (49 for kmtricks)\ngroupsize\t\tGroup of columns to reorder (must be a multiple of 8)\nsubsampled_rows\t\tNumber of rows to be subsampled (30.000 should be suffisant). 0 for all.\nout_column_order\tBinary serialized column order computed from reference matrix\nout_row_order\t\tBinary serialized row order computed for each matrix\nmatrices\t\tAll matrices which columns will be reordered according to a same order (computed from reference matrix).\n\t\t\tWarning: all matrices must have the same size.\n\n";
         return 1;
     }
 
@@ -546,13 +486,12 @@ int main(int argc, char ** argv)
     unsigned groupsize = (unsigned)atol(argv[4]);
     std::size_t subsampled_rows = (std::size_t)atoll(argv[5]);
     char* out_order = argv[6];
-    char* out_row_order = argv[7];
 
     std::vector<char*> matrices;
-    matrices.resize(argc - 8);
+    matrices.resize(argc - 7);
 
-    for(int i = 8; i < argc; ++i)
-        matrices[i-8] = argv[i];
+    for(int i = 7; i < argc; ++i)
+        matrices[i-7] = argv[i];
 
-    Reorder::launch(reference_matrix, matrices, samples, header, groupsize, subsampled_rows, out_order, out_row_order);
+    Reorder::launch(reference_matrix, matrices, samples, header, groupsize, subsampled_rows, out_order);
 }

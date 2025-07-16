@@ -15,7 +15,8 @@
 #include <unistd.h>
 #include <vector>
 
-//SIMD transposition
+//AVX2/SSE2
+#include <immintrin.h>
 #include <emmintrin.h>
 #include <stdint.h>
 
