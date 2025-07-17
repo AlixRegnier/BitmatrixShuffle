@@ -442,7 +442,7 @@ namespace Reorder
             transposed_matrix = get_transposed_matrix(mapped_file, HEADER, ROW_LENGTH, OVERSHOOT_NB_ROWS);
             END_TIMER;
 
-            //Reorder matrix columns
+            //Reorder matrix columns (transposed matrix rows)
             std::cout << "\tReordering matrix columns ... ";
             START_TIMER;
             reorder_matrix_rows(transposed_matrix, 0, OVERSHOOT_NB_ROWS/8, ROW_LENGTH*8, order);
@@ -451,9 +451,11 @@ namespace Reorder
             //Tell system that data will be accessed sequentially
             posix_madvise(mapped_file, OVERSHOOT_FILE_SIZE, POSIX_MADV_RANDOM);
 
+            std::cout << "\tTranspose matrix back ... ";
             //Transpose back (overshooted rows will be written back in memory mapped overshoot but won't be added to file, that's how mmap works with overshoot memory)
+            START_TIMER;
             __sse_trans(reinterpret_cast<const std::uint8_t*>(transposed_matrix), reinterpret_cast<std::uint8_t*>(mapped_file+HEADER), ROW_LENGTH*8, OVERSHOOT_NB_ROWS);
-
+            END_TIMER;
             delete[] transposed_matrix;
 
             //Unmap file in memory and close file descriptor 
