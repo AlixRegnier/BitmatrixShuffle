@@ -433,9 +433,10 @@ namespace Reorder
             if(mapped_file == MAP_FAILED)
                 throw std::runtime_error("mmap() failed");
 
-            //Tell system that data will be accessed sequentially
-            posix_madvise(mapped_file, OVERSHOOT_FILE_SIZE, POSIX_MADV_SEQUENTIAL);
 
+            //Tell system that data will be accessed sequentially
+            posix_madvise(mapped_file, OVERSHOOT_FILE_SIZE, POSIX_MADV_RANDOM);
+            
             std::cout << "\tTranspose matrix for reordering columns ... ";
             START_TIMER;
             transposed_matrix = get_transposed_matrix(mapped_file, HEADER, ROW_LENGTH, OVERSHOOT_NB_ROWS);
@@ -446,6 +447,9 @@ namespace Reorder
             START_TIMER;
             reorder_matrix_rows(transposed_matrix, 0, OVERSHOOT_NB_ROWS/8, ROW_LENGTH*8, order);
             END_TIMER;
+
+            //Tell system that data will be accessed sequentially
+            posix_madvise(mapped_file, OVERSHOOT_FILE_SIZE, POSIX_MADV_RANDOM);
 
             //Transpose back (overshooted rows will be written back in memory mapped overshoot but won't be added to file, that's how mmap works with overshoot memory)
             __sse_trans(reinterpret_cast<const std::uint8_t*>(transposed_matrix), reinterpret_cast<std::uint8_t*>(mapped_file+HEADER), ROW_LENGTH*8, OVERSHOOT_NB_ROWS);
