@@ -26,7 +26,6 @@
 
 //Bit permutation
 #include <bitpermute.h>
-#include <bytewrapper.h>
 
 namespace Reorder 
 {
@@ -50,7 +49,7 @@ namespace Reorder
     IndexDistance find_closest_vertex(VPTree<unsigned>& VPTREE, const unsigned VERTEX, const std::vector<bool>& ALREADY_ADDED);
         
     //Precall of SSE bitmatrix transposition, return a new buffer (should be free from memory when transposed bitmatrix is no longer needed)
-    const char * const get_transposed_matrix(const char * const MAPPED_FILE, const unsigned HEADER, const unsigned ROW_LENGTH,  const std::size_t SUBSAMPLED_ROWS);
+    char* get_transposed_matrix(const char * const MAPPED_FILE, const unsigned HEADER, const unsigned ROW_LENGTH,  const std::size_t SUBSAMPLED_ROWS);
 
     //SSE hamming distance between two buffers
     size_t hamming_distance(const char* const BUFFER1, const char* const BUFFER2, const size_t LENGTH);
