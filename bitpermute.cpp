@@ -1,5 +1,4 @@
 #include <bitpermute.h>
-#include <bytewrapper.h>
 
 namespace Reorder
 {
