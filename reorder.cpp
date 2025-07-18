@@ -221,14 +221,10 @@ namespace Reorder
 
     char* get_transposed_matrix(const char * const MAPPED_FILE, const unsigned HEADER, const unsigned ROW_LENGTH, const std::size_t NB_ROWS)
     {
+        //NB_ROWS/8 is the size of a row in the transposed buffer (as rows are now columns, so the width of transposed matrix) ;; /8 to get width in bytes (=in size of char) instead of bits
         //Transposed buffer containing concatenated columns
         char * transposed_matrix = new char[(8*ROW_LENGTH)*(NB_ROWS/8)];
 
-        /**
-         * Hamming distance (dH) can be computed like this: dH(A,B) = H(A ^ B) ;; with ^ as XOR symbol, and H as the Hamming weight aka popcount
-         * 
-         * NB_ROWS/8 is the size of a row in the transposed buffer (as rows are now columns, so the width of transposed matrix) ;; /8 to get width in bytes (=in size of char) instead of bits
-         */
 
         //Matrix transposition
         __sse_trans(reinterpret_cast<const std::uint8_t*>(MAPPED_FILE+HEADER), reinterpret_cast<std::uint8_t*>(transposed_matrix), NB_ROWS, ROW_LENGTH*8);
@@ -434,7 +430,7 @@ namespace Reorder
                 throw std::runtime_error("mmap() failed");
 
 
-            //Tell system that data will be accessed sequentially
+            //Tell system that data will be accessed randomly
             posix_madvise(mapped_file, OVERSHOOT_FILE_SIZE, POSIX_MADV_RANDOM);
             
             std::cout << "\tTranspose matrix for reordering columns ... ";
@@ -447,9 +443,6 @@ namespace Reorder
             START_TIMER;
             reorder_matrix_rows(transposed_matrix, 0, OVERSHOOT_NB_ROWS/8, ROW_LENGTH*8, order);
             END_TIMER;
-
-            //Tell system that data will be accessed sequentially
-            posix_madvise(mapped_file, OVERSHOOT_FILE_SIZE, POSIX_MADV_RANDOM);
 
             std::cout << "\tTranspose matrix back ... ";
             //Transpose back (overshooted rows will be written back in memory mapped overshoot but won't be added to file, that's how mmap works with overshoot memory)
