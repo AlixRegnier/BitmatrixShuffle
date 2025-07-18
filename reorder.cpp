@@ -219,21 +219,17 @@ namespace Reorder
         return nn;
     }
 
-    const char* const get_transposed_matrix(const char * const MAPPED_FILE, const unsigned HEADER, const unsigned ROW_LENGTH, const std::size_t SUBSAMPLED_ROWS)
+    char* get_transposed_matrix(const char * const MAPPED_FILE, const unsigned HEADER, const unsigned ROW_LENGTH, const std::size_t NB_ROWS)
     {
+        //NB_ROWS/8 is the size of a row in the transposed buffer (as rows are now columns, so the width of transposed matrix) ;; /8 to get width in bytes (=in size of char) instead of bits
         //Transposed buffer containing concatenated columns
-        char * transposed_matrix = new char[(8*ROW_LENGTH)*(SUBSAMPLED_ROWS/8)];
+        char * transposed_matrix = new char[(8*ROW_LENGTH)*(NB_ROWS/8)];
 
-        /**
-         * Hamming distance (dH) can be computed like this: dH(A,B) = H(A ^ B) ;; with ^ as XOR symbol, and H as the Hamming weight aka popcount
-         * 
-         * SUBSAMPLED_ROWS/8 is the size of a row in the transposed buffer (as rows are now columns, so the width of transposed matrix) ;; /8 to get width in bytes (=in size of char) instead of bits
-         */
 
         //Matrix transposition
-        __sse_trans(reinterpret_cast<const std::uint8_t*>(MAPPED_FILE+HEADER), reinterpret_cast<std::uint8_t*>(transposed_matrix), SUBSAMPLED_ROWS, ROW_LENGTH*8);
+        __sse_trans(reinterpret_cast<const std::uint8_t*>(MAPPED_FILE+HEADER), reinterpret_cast<std::uint8_t*>(transposed_matrix), NB_ROWS, ROW_LENGTH*8);
         
-        return static_cast<const char* const>(transposed_matrix);
+        return transposed_matrix;
     }
 
     //SSE2 implementation of Hamming distance
@@ -363,9 +359,6 @@ namespace Reorder
         const std::size_t FILE_SIZE = lseek(fd, 0, SEEK_END);
         lseek(fd, 0, SEEK_SET);
 
-        //Map file in memory
-        char* mapped_file = (char*)mmap(nullptr, FILE_SIZE, PROT_READ, MAP_PRIVATE, fd, 0);
-
         //Number of matrix columns
         const unsigned COLUMNS = (SAMPLES+7)/8*8;
 
@@ -374,6 +367,9 @@ namespace Reorder
 
         //Number of matrix rows
         const std::size_t NB_ROWS = (FILE_SIZE - HEADER) / ROW_LENGTH;
+
+        //Map file in memory
+        char* mapped_file = (char*)mmap(nullptr, FILE_SIZE, PROT_READ, MAP_PRIVATE, fd, 0);
 
         if(NB_ROWS < subsampled_rows)
             throw std::invalid_argument("Number of subsampled rows can't be greater to the number of rows in the binary matrix. Maybe one of the parameters is wrong ?");
@@ -391,7 +387,7 @@ namespace Reorder
         //Compute distance matrix
         std::cout << "Transpose submatrix from reference submatrix '" << REFERENCE_MATRIX << "\' ... ";
         START_TIMER;
-        const char* const transposed_matrix = get_transposed_matrix(mapped_file, HEADER, ROW_LENGTH, subsampled_rows);
+        char* transposed_matrix = get_transposed_matrix(mapped_file, HEADER, ROW_LENGTH, subsampled_rows);
         END_TIMER;
 
         //Approximate TSP path with double ended Nearest-Neighbor; compute order
@@ -416,25 +412,47 @@ namespace Reorder
         write(fdorder, reinterpret_cast<const char*>(order.data()), sizeof(unsigned)*order.size());
         close(fdorder);
 
+        //Overshoot NB_ROWS to be a multiple of 8
+        const std::size_t OVERSHOOT_NB_ROWS = (NB_ROWS + 7) / 8 * 8;
+
+        //Compute overshooted file size
+        const std::size_t OVERSHOOT_FILE_SIZE = HEADER + OVERSHOOT_NB_ROWS * ROW_LENGTH;
+
         //Reorder all matrices
         for(unsigned i = 0; i < MATRICES.size(); i++)
         {
             std::cout << "Reordering matrix '" << MATRICES[i] << "' " << (i+1) << "/" << MATRICES.size() << " ... " << std::endl;
 
             fd = open(MATRICES[i], O_RDWR);
-            mapped_file = (char*)mmap(nullptr, FILE_SIZE, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
+            mapped_file = (char*)mmap(nullptr, OVERSHOOT_FILE_SIZE, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
 
-            //Tell system that data will be accessed sequentially
-            posix_madvise(mapped_file, FILE_SIZE, POSIX_MADV_SEQUENTIAL);
+            if(mapped_file == MAP_FAILED)
+                throw std::runtime_error("mmap() failed");
 
-            //Reorder matrix columns
-            std::cout << "\tReordering matrix columns ... ";
+
+            //Tell system that data will be accessed randomly
+            posix_madvise(mapped_file, OVERSHOOT_FILE_SIZE, POSIX_MADV_RANDOM);
+            
+            std::cout << "\tTranspose matrix for reordering columns ... ";
             START_TIMER;
-            reorder_matrix_columns(mapped_file, HEADER, COLUMNS, ROW_LENGTH, NB_ROWS, order);
+            transposed_matrix = get_transposed_matrix(mapped_file, HEADER, ROW_LENGTH, OVERSHOOT_NB_ROWS);
             END_TIMER;
 
+            //Reorder matrix columns (transposed matrix rows)
+            std::cout << "\tReordering matrix columns ... ";
+            START_TIMER;
+            reorder_matrix_rows(transposed_matrix, 0, OVERSHOOT_NB_ROWS/8, ROW_LENGTH*8, order);
+            END_TIMER;
+
+            std::cout << "\tTranspose matrix back ... ";
+            //Transpose back (overshooted rows will be written back in memory mapped overshoot but won't be added to file, that's how mmap works with overshoot memory)
+            START_TIMER;
+            __sse_trans(reinterpret_cast<const std::uint8_t*>(transposed_matrix), reinterpret_cast<std::uint8_t*>(mapped_file+HEADER), ROW_LENGTH*8, OVERSHOOT_NB_ROWS);
+            END_TIMER;
+            delete[] transposed_matrix;
+
             //Unmap file in memory and close file descriptor 
-            munmap(mapped_file, FILE_SIZE);
+            munmap(mapped_file, OVERSHOOT_FILE_SIZE);
             close(fd);
         }
 
