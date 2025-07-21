@@ -1,13 +1,15 @@
 #include <reorder.h>
 #include <chrono>
 
-#define DECLARE_TIMER std::chrono::time_point<std::chrono::high_resolution_clock> __start_timer, __stop_timer; std::size_t __integral_time; 
+#define DECLARE_TIMER std::chrono::time_point<std::chrono::high_resolution_clock> __start_timer, __stop_timer; std::size_t __integral_time
+
 #define START_TIMER __start_timer = std::chrono::high_resolution_clock::now(); \
                     std::cout << std::flush
 
 #define END_TIMER __stop_timer = std::chrono::high_resolution_clock::now(); \
-                  __integral_time = static_cast<std::size_t>(std::chrono::duration_cast<std::chrono::milliseconds>(__stop_timer - __start_timer).count()); \
-                  std::cout << std::setprecision(3) << (__integral_time / 1000.0) << "s" << std::endl
+                  __integral_time = static_cast<std::size_t>(std::chrono::duration_cast<std::chrono::milliseconds>(__stop_timer - __start_timer).count())
+
+#define SHOW_TIMER std::cout << std::setprecision(3) << (__integral_time / 1000.0) << "s" << std::endl
 
 
 namespace Reorder 
@@ -337,7 +339,7 @@ namespace Reorder
             order[i] = i;
     }
     
-    void launch(const char * const REFERENCE_MATRIX, const std::vector<char*>& MATRICES, const unsigned SAMPLES, const unsigned HEADER, const unsigned GROUPSIZE, std::size_t subsampled_rows, const char * const OUT_ORDER)
+    void launch(const char * const REFERENCE_MATRIX, const std::vector<std::string>& MATRICES, const unsigned SAMPLES, const unsigned HEADER, const unsigned GROUPSIZE, std::size_t subsampled_rows, std::vector<unsigned>& order)
     {
         DECLARE_TIMER;
 
@@ -381,20 +383,19 @@ namespace Reorder
         if(subsampled_rows % 8 != 0)
             throw std::invalid_argument("The number of subsampled rows must be a multiple of 8 (for transposition)");
 
-        std::vector<unsigned> order;
-        order.resize(COLUMNS);
-
         //Compute distance matrix
         std::cout << "Transpose submatrix from reference submatrix '" << REFERENCE_MATRIX << "\' ... ";
         START_TIMER;
         char* transposed_matrix = get_transposed_matrix(mapped_file, HEADER, ROW_LENGTH, subsampled_rows);
-        END_TIMER;
+        END_TIMER; SHOW_TIMER;
 
         //Approximate TSP path with double ended Nearest-Neighbor; compute order
         std::cout << "Computing column order using TSP ... " << std::endl;
         START_TIMER;
         TSP_NN(transposed_matrix, COLUMNS, GROUPSIZE, subsampled_rows, order);
-        END_TIMER;
+        END_TIMER; 
+        std::cout << "VPTree & NN path: ";
+        SHOW_TIMER;
 
         //Unmap reference matrix and close its file descriptor 
         munmap(mapped_file, FILE_SIZE);
@@ -405,12 +406,6 @@ namespace Reorder
         
         //Shift blank columns (when samples is not a multiple of 8) to their original location
         immutable_filling_columns_inplace(order, COLUMNS, COLUMNS-SAMPLES);
-        
-        //Serialize column order
-        std::cout << "Serializing column order ..." << std::endl;
-        int fdorder = open(OUT_ORDER, O_WRONLY | O_CREAT | O_TRUNC, 0644);
-        write(fdorder, reinterpret_cast<const char*>(order.data()), sizeof(unsigned)*order.size());
-        close(fdorder);
 
         //Overshoot NB_ROWS to be a multiple of 8
         const std::size_t OVERSHOOT_NB_ROWS = (NB_ROWS + 7) / 8 * 8;
@@ -423,7 +418,7 @@ namespace Reorder
         {
             std::cout << "Reordering matrix '" << MATRICES[i] << "' " << (i+1) << "/" << MATRICES.size() << " ... " << std::endl;
 
-            fd = open(MATRICES[i], O_RDWR);
+            fd = open(MATRICES[i].c_str(), O_RDWR);
             mapped_file = (char*)mmap(nullptr, OVERSHOOT_FILE_SIZE, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
 
             if(mapped_file == MAP_FAILED)
@@ -436,19 +431,19 @@ namespace Reorder
             std::cout << "\tTranspose matrix for reordering columns ... ";
             START_TIMER;
             transposed_matrix = get_transposed_matrix(mapped_file, HEADER, ROW_LENGTH, OVERSHOOT_NB_ROWS);
-            END_TIMER;
+            END_TIMER; SHOW_TIMER;
 
             //Reorder matrix columns (transposed matrix rows)
             std::cout << "\tReordering matrix columns ... ";
             START_TIMER;
             reorder_matrix_rows(transposed_matrix, 0, OVERSHOOT_NB_ROWS/8, ROW_LENGTH*8, order);
-            END_TIMER;
+            END_TIMER; SHOW_TIMER;
 
             std::cout << "\tTranspose matrix back ... ";
             //Transpose back (overshooted rows will be written back in memory mapped overshoot but won't be added to file, that's how mmap works with overshoot memory)
             START_TIMER;
             __sse_trans(reinterpret_cast<const std::uint8_t*>(transposed_matrix), reinterpret_cast<std::uint8_t*>(mapped_file+HEADER), ROW_LENGTH*8, OVERSHOOT_NB_ROWS);
-            END_TIMER;
+            END_TIMER; SHOW_TIMER;
             delete[] transposed_matrix;
 
             //Unmap file in memory and close file descriptor 
@@ -488,28 +483,229 @@ namespace Reorder
     }
 };
 
+
+//Function mapping byte inner bits position (MSB position is 0, LSB position is 7) to reversed order
+constexpr unsigned rev8(unsigned x)
+{
+    /*
+     0 -->  7
+     1 -->  6
+     2 -->  5
+     3 -->  4
+     4 -->  3
+     5 -->  2
+     6 -->  1
+     7 -->  0
+     8 --> 15
+     9 --> 14
+    10 --> 13
+    11 --> 12
+    ...    
+    */
+
+    //Equivalent instructions (two last instructions have exactly the same assembly code)
+    //return 7 - (x % 8) + (x / 8) * 8;
+    //return 7 - (x & 0x7U) + (x / 8) * 8;
+    //return (x | 0x7U) - (x & 0x7U);
+    //return (x & ~0x7U) | ~(x & 0x7U);
+    return (x | 0x7U) - (x & 0x7U);
+}
+
 int main(int argc, char ** argv)
 {
-    if(argc < 8)
+    std::string index_path;
+    std::string index_name;
+
+    unsigned groupsize = 0;
+    std::size_t subsampled_rows = 20000;
+
+    bool index_name_flag = false;
+
+    try 
     {
-        std::cout << "Usage: reorder <ref_matrix> <samples> <header> <groupsize> <subsampled_rows> <out_column_order> <matrices...>\n\nref_matrix\t\tMatrix that will be used to compute path TSP\nsamples\t\t\tThe number of samples in a matrix (will be set to the upper multiple of 8 if given number is not a multiple of 8)\nheader\t\t\tSize of a matrix header (49 for kmtricks)\ngroupsize\t\tGroup of columns to reorder (must be a multiple of 8)\nsubsampled_rows\t\tNumber of rows to be subsampled (30.000 should be suffisant). 0 for all.\nout_column_order\tBinary serialized column order computed from reference matrix\nout_row_order\t\tBinary serialized row order computed for each matrix\nmatrices\t\tAll matrices which columns will be reordered according to a same order (computed from reference matrix).\n\t\t\tWarning: all matrices must have the same size.\n\n";
+        cxxopts::Options options("BitmatrixShuffle", "Program reordering bitmatrix columns in a more compressive way (path TSP using Nearest-Neighbor)");
+        
+        options.add_options()
+            ("i,index", "Path to kmindex index directory.", cxxopts::value<std::string>())
+            ("n,index-name", "Index name.", cxxopts::value<std::string>())
+            ("g,groupsize", "Group size {0}.", cxxopts::value<int>())
+            ("s,subsampled-rows", "Number of subsampled rows to compute a distance {20000}.", cxxopts::value<int>())
+            ("h,help", "Print usage.");
+
+        auto args = options.parse(argc, argv);
+
+        if (args.count("help"))
+        {
+            std::cout << options.help() << std::endl;
+            return 0;
+        }
+
+        // Check required argument
+        if (!args.count("index"))
+        {
+            std::cerr << "Error: -i/--index is required\n";
+            std::cout << options.help() << std::endl;
+            return 1;
+        }
+
+        // Get required argument
+        index_path = args["index"].as<std::string>();
+        
+        // Validate that index path exists and is a directory
+        if (!std::filesystem::exists(index_path)) 
+        {
+            std::cerr << "Error: Index directory '" << index_path << "' does not exist\n";
+            return 1;
+        }
+        
+        if (!std::filesystem::is_directory(index_path))
+        {
+            std::cerr << "Error: Index path '" << index_path << "' is not a directory\n";
+            return 1;
+        }
+
+        if(args.count("index-name"))
+        {
+            index_name = args["index-name"].as<std::string>();
+            index_name_flag = true;
+        }
+
+        // Get optional arguments
+        if (args.count("groupsize"))
+            groupsize = args["groupsize"].as<unsigned>();
+
+        if (args.count("subsampled-rows")) 
+            subsampled_rows = args["subsampled-rows"].as<std::size_t>();
+
+    } 
+    catch (const cxxopts::exceptions::exception& e)
+    {
+        std::cerr << "Error parsing options: " << e.what() << std::endl;
+        return 1;
+    } 
+    catch (const std::exception& e)
+    {
+        std::cerr << "Error: " << e.what() << std::endl;
         return 1;
     }
 
     RNG::set_seed(42);
 
-    char* reference_matrix = argv[1];
-    unsigned samples = (unsigned)atol(argv[2]);
-    unsigned header = (unsigned)atol(argv[3]);
-    unsigned groupsize = (unsigned)atol(argv[4]);
-    std::size_t subsampled_rows = (std::size_t)atoll(argv[5]);
-    char* out_order = argv[6];
+    std::string json_path = index_path + "/index.json";
 
-    std::vector<char*> matrices;
-    matrices.resize(argc - 7);
+    //Open file descriptor on input json file
+    std::ifstream fdin(json_path.c_str(), std::ios::in);
 
-    for(int i = 7; i < argc; ++i)
-        matrices[i-7] = argv[i];
+    //Deserialize JSON file
+    json indexjson = json::parse(fdin);
+    fdin.close();
+    
+    //Check if JSON file has "index" as 0-depth key
+    if(!indexjson.contains("index"))
+        throw std::runtime_error("Index was not recognized.");
 
-    Reorder::launch(reference_matrix, matrices, samples, header, groupsize, subsampled_rows, out_order);
+    //If no index name specified, find the first one
+    if(!index_name_flag)
+        for (auto& kv : indexjson["index"].items())
+        {
+            std::cout << "key: " << kv.key() << ", value:" << kv.value() << '\n';
+        }
+
+    return 1;
+
+    //Check if JSON file -> ["index"] has <index_name> as key
+    if(!indexjson["index"].contains(index_name))
+        throw std::runtime_error("Index '" + index_name + "' doesn't exist");
+
+    if(!indexjson["index"][index_name].contains("nb_samples"))
+        throw std::runtime_error("Index '" + index_name + "' has no field 'nb_samples'");
+
+    if(!indexjson["index"][index_name].contains("nb_partitions"))
+        throw std::runtime_error("Index '" + index_name + "' has no field 'nb_partitions'");
+
+    //Get current number of samples
+    unsigned nb_samples = indexjson["index"][index_name]["nb_samples"].get<unsigned>();
+    
+    //Get current number of partitions
+    unsigned nb_partitions = indexjson["index"][index_name]["nb_partitions"].get<unsigned>();
+
+
+    //Select random reference partition (excepted 0)
+    unsigned reference_partition = RNG::rand_uint32_t(1, nb_partitions);
+
+    //Check each partitions
+    std::vector<std::string> matrices;
+    matrices.reserve(nb_partitions);
+
+    for(unsigned i = 0; i < nb_partitions; ++i)
+    {
+        std::string p = index_path + "/matrices/matrix_" + std::to_string(i) + ".cmbf";
+
+        if(std::filesystem::exists(p))
+            matrices.push_back(p);
+        else
+        {
+            std::cerr << "File '" + p + "' does not exist\n";
+            return 2;
+        }
+    }
+
+
+    std::string reference_matrix = index_path + "/matrices/matrix_" + std::to_string(reference_partition) + ".cmbf";
+    std::string out_order = index_path + "/order.bin";
+
+    std::vector<unsigned> order;
+    order.resize(nb_samples);
+
+    Reorder::launch(reference_matrix.c_str(), matrices, nb_samples, 49, groupsize, subsampled_rows, order);
+
+    //Serialize column order
+    std::cout << "Serializing column order ..." << std::endl;
+    int fdorder = open(out_order.c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0644);
+    write(fdorder, reinterpret_cast<const char*>(order.data()), sizeof(unsigned)*order.size());
+    close(fdorder);
+
+    //Read samples from index.json and put them in a vector
+    std::vector<std::string> samples = indexjson["index"][index_name]["samples"].get<std::vector<std::string>>();
+
+    //Replace each element by the one that should be placed according to the permutation
+    for(unsigned i = 0; i < nb_samples; ++i)
+        indexjson["index"][index_name]["samples"][i] = samples[rev8(order[rev8(i)])];
+
+    //Apply modifications to JSON file
+    std::ofstream fdout(json_path, std::ofstream::out);
+    fdout << std::setw(4) << indexjson << std::endl;
+    fdout.close();
+
+    //Clear JSON object
+    indexjson.clear();
+
+    //Modify kmindex FOF
+    std::string fof_path = index_path + "/kmtricks.fof";
+
+    std::ifstream ifdfof(fof_path);
+    
+    if (!ifdfof.is_open()) 
+    {
+        std::cerr << "Error: Could not read file '" << fof_path << "'\n";
+        return 2;
+    }
+
+    //Store all lines
+    unsigned i = 0;
+    while (std::getline(ifdfof, samples[i++]));
+
+    ifdfof.close();
+    std::ofstream ofdfof(fof_path);
+
+    if (!ifdfof.is_open()) 
+    {
+        std::cerr << "Error: Could not write file '" << fof_path << "'\n";
+        return 2;
+    }
+
+    for(i = 0; i < nb_samples; ++i)
+        ofdfof << samples[rev8(order[rev8(i)])] << '\n';
+
+    ofdfof.close();
 }
