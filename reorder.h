@@ -37,10 +37,10 @@ namespace Reorder
 
     
     //Build a path by taking closest vertex (from tail)
-    void build_NN(const char* const TRANSPOSED_MATRIX, DistanceMatrix& distanceMatrix, const std::size_t SUBSAMPLED_ROWS, const std::size_t OFFSET, std::vector<unsigned>& order);
+    std::size_t build_NN(const char* const TRANSPOSED_MATRIX, DistanceMatrix& distanceMatrix, const std::size_t SUBSAMPLED_ROWS, const std::size_t OFFSET, std::vector<unsigned>& order);
 
     //Build a path by taking closest vertex (compare closest from tail and closest from head)
-    void build_double_end_NN(const char* const TRANSPOSED_MATRIX, DistanceMatrix& distanceMatrix, const std::size_t SUBSAMPLED_ROWS, const std::size_t OFFSET, std::vector<unsigned>& order);
+    std::size_t build_double_end_NN(const char* const TRANSPOSED_MATRIX, DistanceMatrix& distanceMatrix, const std::size_t SUBSAMPLED_ROWS, const std::size_t OFFSET, std::vector<unsigned>& order);
     
     //Distance computation between two columns
     double columns_hamming_distance(const char* const TRANSPOSED_MATRIX, const std::size_t MAX_ROW, const unsigned COLUMN_A, const unsigned COLUMN_B);

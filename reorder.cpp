@@ -78,7 +78,7 @@ namespace Reorder
     #undef INP
     
     //TSP path
-    void build_NN(const char* const transposed_matrix, DistanceMatrix& distanceMatrix, const std::size_t SUBSAMPLED_ROWS, const std::size_t OFFSET, std::vector<unsigned>& order)
+    std::size_t build_NN(const char* const transposed_matrix, DistanceMatrix& distanceMatrix, const std::size_t SUBSAMPLED_ROWS, const std::size_t OFFSET, std::vector<unsigned>& order)
     {
         //Pick a random first vertex
         unsigned firstVertex = RNG::rand_uint32_t(0, distanceMatrix.width());
@@ -98,7 +98,7 @@ namespace Reorder
         for(unsigned i = 0; i < vertices.size(); ++i)
             vertices[i] = i;
 
-        unsigned counter = 0;
+        std::size_t counter = 0;
 
         DistanceFunctions df = VPTree<unsigned>::bindDistanceFunctions(
             [=, &counter](unsigned a, unsigned b) -> double {
@@ -125,11 +125,13 @@ namespace Reorder
         //Store global order
         for(unsigned i = 0; i < distanceMatrix.width(); ++i)
             order[i+OFFSET] = path[i] + OFFSET; //Add offset because columns are addressed by their global location
+
+        return counter;
     }
 
 
     //TSP path
-    void build_double_end_NN(const char* const transposed_matrix, DistanceMatrix& distanceMatrix, const std::size_t SUBSAMPLED_ROWS, const std::size_t OFFSET, std::vector<unsigned>& order)
+    std::size_t build_double_end_NN(const char* const transposed_matrix, DistanceMatrix& distanceMatrix, const std::size_t SUBSAMPLED_ROWS, const std::size_t OFFSET, std::vector<unsigned>& order)
     {
         //Pick a random first vertex
         unsigned firstVertex = RNG::rand_uint32_t(0, distanceMatrix.width());
@@ -148,7 +150,7 @@ namespace Reorder
         for(unsigned i = 0; i < vertices.size(); ++i)
             vertices[i] = i;
 
-        unsigned counter = 0;
+        std::size_t counter = 0;
 
         //Use counter to count how many distance computation could be avoided by using a VPTree
         DistanceFunctions df = VPTree<unsigned>::bindDistanceFunctions(
@@ -203,6 +205,59 @@ namespace Reorder
         //Store global order
         for(unsigned i = 0; i < distanceMatrix.width(); ++i)
             order[i+OFFSET] = orderDeque[i] + OFFSET; //Add offset because columns are addressed by their global location
+
+
+        //###METRICS
+        double original_consecutive_distances_sum = 0.0;
+        double new_consecutive_distances_sum = 0.0;
+
+        for(unsigned i = 0; i + 1 < distanceMatrix.width(); ++i)
+        {
+            //Make sure original consecutive distances has been computed
+            if(distanceMatrix.get(i, i+1) == NULL_DISTANCE)
+                distanceMatrix.set(i, i+1, columns_hamming_distance(transposed_matrix, SUBSAMPLED_ROWS, i+OFFSET, i+1+OFFSET));
+
+            original_consecutive_distances_sum += distanceMatrix.get(i, i+1);
+
+            //Make sure new consecutive distances has been computed
+            if(distanceMatrix.get(orderDeque[i], orderDeque[i+1]) == NULL_DISTANCE)
+                distanceMatrix.set(orderDeque[i], orderDeque[i+1], columns_hamming_distance(transposed_matrix, SUBSAMPLED_ROWS, order[i+OFFSET], order[i+1+OFFSET]));
+
+            new_consecutive_distances_sum += distanceMatrix.get(orderDeque[i], orderDeque[i+1]);
+        }
+
+        double original_consecutive_distances_average = original_consecutive_distances_sum / (distanceMatrix.width() - 1);
+        double new_consecutive_distances_average = new_consecutive_distances_sum / (distanceMatrix.width() - 1);
+
+        double original_consecutive_distances_variance = 0.0;
+        double new_consecutive_distances_variance = 0.0;
+
+        //Compute variance
+        for(unsigned i = 0; i + 1 < distanceMatrix.width(); ++i)
+        {
+            original_consecutive_distances_variance += std::pow(distanceMatrix.get(i, i+1) - original_consecutive_distances_average, 2);
+            new_consecutive_distances_variance += std::pow(distanceMatrix.get(orderDeque[i], orderDeque[i+1]) - new_consecutive_distances_average, 2);
+        }
+
+        //N-1: population bias
+        original_consecutive_distances_variance /= distanceMatrix.width() - 2;
+        new_consecutive_distances_variance /= distanceMatrix.width() - 2;
+
+        //Compute stdev from variance
+        double original_consecutive_distances_stdev = std::sqrt(original_consecutive_distances_variance);
+        double new_consecutive_distances_stdev = std::sqrt(new_consecutive_distances_variance);
+
+
+        std::cout << "Average consecutive column distance (original): " << original_consecutive_distances_average << std::endl;
+        std::cout << "Average consecutive column distance (reorder):  " << new_consecutive_distances_average << std::endl;
+
+        std::cout << "Variance consecutive column distances (original): " << original_consecutive_distances_variance << std::endl;
+        std::cout << "Variance consecutive column distances (reorder):  " << new_consecutive_distances_variance << std::endl;
+
+        std::cout << "Standard deviation consecutive column distances (original): " << original_consecutive_distances_stdev << std::endl;
+        std::cout << "Standard deviation consecutive column distances (reorder):  " << new_consecutive_distances_stdev << std::endl;
+
+        return counter;
     }
 
     double columns_hamming_distance(const char* const transposed_matrix, const std::size_t MAX_ROW, const unsigned COLUMN_A, const unsigned COLUMN_B)
@@ -461,7 +516,29 @@ namespace Reorder
 
     void TSP_NN(const char* const transposed_matrix, const unsigned COLUMNS, const unsigned GROUPSIZE, const std::size_t SUBSAMPLED_ROWS, std::vector<unsigned>& order)
     {
+        DECLARE_TIMER;
+
         unsigned last_group_size;
+
+        std::cout << "Estimate VPTree behaviour on dataset ... ";
+        START_TIMER;
+        {
+            const unsigned TMP_SIZE = std::min((unsigned)2048, GROUPSIZE);
+            std::vector<unsigned> tmp_order;
+            tmp_order.resize(TMP_SIZE);
+
+            for(unsigned i = 0; i < tmp_order.size(); ++i)
+                tmp_order[i] = i;
+
+            DistanceMatrix tmp_distMatrix(TMP_SIZE);
+
+            std::size_t computed_distances = build_double_end_NN(transposed_matrix, tmp_distMatrix, SUBSAMPLED_ROWS, 0, tmp_order);
+
+            const unsigned TMP_MAX_DIST = TMP_SIZE*(TMP_SIZE-1)/2;
+            std::cout << "Computed distances and bounds: " << TMP_SIZE*std::log2(TMP_SIZE) << " <= " << computed_distances << " <= " << TMP_MAX_DIST << std::endl;
+            std::cout << "Proportion: " << (1.0*computed_distances)/TMP_MAX_DIST*100.0 << std::endl;
+        }
+        END_TIMER;
         
         //Number of group of columns
         const unsigned NB_GROUPS = (COLUMNS+GROUPSIZE-1)/GROUPSIZE;
