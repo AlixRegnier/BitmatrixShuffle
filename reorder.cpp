@@ -511,6 +511,11 @@ constexpr unsigned rev8(unsigned x)
     return (x | 0x7U) - (x & 0x7U);
 }
 
+void usage()
+{
+    std::cout << "Usage: bitmatrixshuffle -i <index> [-n <index_name>] [-g <groupsize>] [-s <subsampled_rows>]\n\n-i, --index STR\t\t\tPath to kmindex index directory.\n-g, --groupsize INT\t\tGroup size {0}.\n-n, --index-name STR\t\tIndex name.\n-s, --subsampled-rows INT\tNumber of subsampled rows to compute a distance {20000}.\n\n-h, --help\t\t\tPrint this help.\n";
+}
+
 int main(int argc, char ** argv)
 {
     std::string index_path;
@@ -523,7 +528,7 @@ int main(int argc, char ** argv)
 
     try 
     {
-        cxxopts::Options options("BitmatrixShuffle", "Program reordering bitmatrix columns in a more compressive way (path TSP using Nearest-Neighbor)");
+        cxxopts::Options options("BitmatrixShuffle", "Program reordering bitmatrix columns in a more compressive way (path TSP using Nearest-Neighbor)\n");
         
         options.add_options()
             ("i,index", "Path to kmindex index directory.", cxxopts::value<std::string>())
@@ -536,7 +541,7 @@ int main(int argc, char ** argv)
 
         if (args.count("help"))
         {
-            std::cout << options.help() << std::endl;
+            usage();
             return 0;
         }
 
@@ -544,7 +549,7 @@ int main(int argc, char ** argv)
         if (!args.count("index"))
         {
             std::cerr << "Error: -i/--index is required\n";
-            std::cout << options.help() << std::endl;
+            usage();
             return 1;
         }
 
@@ -555,13 +560,13 @@ int main(int argc, char ** argv)
         if (!std::filesystem::exists(index_path)) 
         {
             std::cerr << "Error: Index directory '" << index_path << "' does not exist\n";
-            return 1;
+            return 2;
         }
         
         if (!std::filesystem::is_directory(index_path))
         {
             std::cerr << "Error: Index path '" << index_path << "' is not a directory\n";
-            return 1;
+            return 2;
         }
 
         if(args.count("index-name"))
@@ -581,12 +586,12 @@ int main(int argc, char ** argv)
     catch (const cxxopts::exceptions::exception& e)
     {
         std::cerr << "Error parsing options: " << e.what() << std::endl;
-        return 1;
+        return 2;
     } 
     catch (const std::exception& e)
     {
         std::cerr << "Error: " << e.what() << std::endl;
-        return 1;
+        return 2;
     }
 
     RNG::set_seed(42);
