@@ -198,6 +198,12 @@ namespace Reorder
     }
 };
 
+std::string trim(const std::string& line, const std::string& characters)
+{
+    std::size_t start = line.find_first_not_of(characters);
+    std::size_t end = line.find_last_not_of(characters);
+    return start == end ? "" : line.substr(start, end - start + 1);
+}
 
 //Function mapping byte inner bits position (MSB position is 0, LSB position is 7) to reversed order
 constexpr unsigned rev8(unsigned x)
@@ -264,7 +270,7 @@ int main(int argc, char ** argv)
         }
 
         // Get required argument
-        index_path = args["index"].as<std::string>();
+        index_path = trim(args["index"].as<std::string>(), "/");
         
         // Validate that index path exists and is a directory
         if (!std::filesystem::exists(index_path)) 
@@ -368,10 +374,10 @@ int main(int argc, char ** argv)
     std::vector<unsigned> reversed_order;
     reversed_order.resize(columns);
 
-    std::cout << "Parameters:\nIndex name:\t" << index_name << "\n#samples:\tt" << nb_samples << std::endl;
+    std::cout << "Parameters:\n\nIndex name:\t" << index_name << "\nSamples:\t" << nb_samples << std::endl;
 
     //Serialize column order
-    std::cout << "Deserializing column order ..." << std::endl;
+    std::cout << "\nDeserializing column order ..." << std::endl;
     int fdorder = open(in_order.c_str(), O_RDONLY);
     read(fdorder, reinterpret_cast<char*>(order.data()), sizeof(unsigned)*order.size());
     close(fdorder);
@@ -381,6 +387,8 @@ int main(int argc, char ** argv)
         reversed_order[order[i]] = i;
 
     Reorder::launch(matrices, nb_samples, 49, reversed_order);
+
+    std::cout << "Reorder JSON samples order ..." << std::endl;
 
     //Read samples from index.json and put them in a vector
     std::vector<std::string> samples = indexjson["index"][index_name]["samples"].get<std::vector<std::string>>();
@@ -396,6 +404,8 @@ int main(int argc, char ** argv)
 
     //Clear JSON object
     indexjson.clear();
+
+    std::cout << "Reorder FOF samples order ..." << std::endl;
 
     //Modify kmindex FOF
     std::string fof_path = index_path + "/" + index_name + "/kmtricks.fof";

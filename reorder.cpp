@@ -374,7 +374,7 @@ namespace Reorder
         if(subsampled_rows % 8 != 0)
             throw std::invalid_argument("The number of subsampled rows must be a multiple of 8 (for transposition)");
 
-        std::cout << "Group size:\t" << groupsize << "Subsampled rows:\t" << subsampled_rows << "\n\n";
+        std::cout << "Group size:\t\t" << groupsize << "\nSubsampled rows:\t" << subsampled_rows << "\n\n";
 
         //Compute distance matrix
         std::cout << "Transpose submatrix from reference submatrix '" << REFERENCE_MATRIX << "\' ... ";
@@ -478,6 +478,12 @@ namespace Reorder
     }
 };
 
+std::string trim(const std::string& line, const std::string& characters)
+{
+    std::size_t start = line.find_first_not_of(characters);
+    std::size_t end = line.find_last_not_of(characters);
+    return start == end ? "" : line.substr(start, end - start + 1);
+}
 
 //Function mapping byte inner bits position (MSB position is 0, LSB position is 7) to reversed order
 constexpr unsigned rev8(unsigned x)
@@ -549,7 +555,7 @@ int main(int argc, char ** argv)
         }
 
         // Get required argument
-        index_path = args["index"].as<std::string>();
+        index_path = trim(args["index"].as<std::string>(), "/");
         
         // Validate that index path exists and is a directory
         if (!std::filesystem::exists(index_path)) 
@@ -666,7 +672,7 @@ int main(int argc, char ** argv)
     std::vector<unsigned> order;
     order.resize(columns);
 
-    std::cout << "Parameters:\nIndex name:\t" << index_name << "\n#samples:\tt" << nb_samples << std::endl;
+    std::cout << "Parameters:\n\nIndex name:\t\t" << index_name << "\nSamples:\t\t" << nb_samples << std::endl;
     Reorder::launch(reference_matrix.c_str(), matrices, nb_samples, 49, groupsize, subsampled_rows, order);
 
     //Serialize column order
@@ -674,6 +680,9 @@ int main(int argc, char ** argv)
     int fdorder = open(out_order.c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0644);
     write(fdorder, reinterpret_cast<const char*>(order.data()), sizeof(unsigned)*order.size());
     close(fdorder);
+
+
+    std::cout << "Reorder JSON samples order ..." << std::endl;
 
     //Read samples from index.json and put them in a vector
     std::vector<std::string> samples = indexjson["index"][index_name]["samples"].get<std::vector<std::string>>();
@@ -689,6 +698,8 @@ int main(int argc, char ** argv)
 
     //Clear JSON object
     indexjson.clear();
+
+    std::cout << "Reorder FOF samples order ..." << std::endl;
 
     //Modify kmindex FOF
     std::string fof_path = index_path + "/" + index_name + "/kmtricks.fof";
