@@ -35,7 +35,7 @@ bitmatrixshuffle -i <index_path> [-n <index_name>] [-g <groupsize>] [-s <subsamp
 Short name|Long name|Value type|Description
 :--:|:--:|:--:|:--
 -i|--index|STR|Index path (directory containing symbolic links and index.json)
--g|--groupsize|INT|Size of path TSP instances to reorder columns
+-g|--groupsize|INT|Size of path TSP instances to reorder columns<br/>**Default**: All samples
 -n|--index-name|STR|Name of subindex<br/>**Default**: First registered subindex
 -s|--subsampled-rows|INT|Number of subsampled rows to compute a distance<br/>**Default**: 20,000
 
