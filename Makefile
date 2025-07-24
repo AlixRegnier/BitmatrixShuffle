@@ -14,10 +14,10 @@ rng.o: rng.cpp rng.h
 	g++ $(FLAGS) $(CPPFLAG) -I. -c rng.cpp
 
 reorder: reorder.cpp reorder.h bitpermute.o rng.o distance_matrix.o fast_median.o vptree.h vptree_impl.h
-	g++ $(FLAGS) $(CPPFLAG) -I. -I./cxxopts/include -I./json/single_include -o reorder reorder.cpp distance_matrix.o rng.o fast_median.o bitpermute.o
+	g++ $(FLAGS) $(CPPFLAG) -I. -I./cxxopts/include -I./json/single_include -o bitmatrixshuffle reorder.cpp distance_matrix.o rng.o fast_median.o bitpermute.o
 
 reverse_reorder: reverse_reorder.cpp reverse_reorder.h bitpermute.o
-	g++ $(FLAGS) $(CPPFLAG) -I. -o reverse_reorder reverse_reorder.cpp bitpermute.o
+	g++ $(FLAGS) $(CPPFLAG) -I. -I./cxxopts/include -I./json/single_include -o reverse_bitmatrixshuffle reverse_reorder.cpp bitpermute.o
 
 bitpermute.o: bitpermute.cpp bitpermute.h
 	g++ $(FLAGS) $(CPPFLAG) -I. -c bitpermute.cpp
