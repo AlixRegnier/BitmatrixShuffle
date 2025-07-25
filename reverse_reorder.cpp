@@ -155,45 +155,65 @@ namespace Reorder
         //Compute overshooted file size
         const std::size_t OVERSHOOT_FILE_SIZE = HEADER + OVERSHOOT_NB_ROWS * ROW_LENGTH;
 
-        char * transposed_matrix = ALLOCATE_MATRIX(OVERSHOOT_NB_ROWS, COLUMNS);
+        std::size_t BLOCK_SIZE = 8388608; // 8 MiB
+
+        std::size_t BLOCK_NB_ROWS = (BLOCK_SIZE+ROW_LENGTH-1) / ROW_LENGTH; //Number of rows in a block
+        BLOCK_NB_ROWS = (BLOCK_NB_ROWS+7)/8*8; //Roundup to next multiple of 8 (needed for matrix transposition)
+
+        BLOCK_SIZE = ROW_LENGTH*BLOCK_NB_ROWS; //Block size will most of time be slightly bigger than 8 MiB
+
+        const std::size_t NB_BLOCKS = OVERSHOOT_NB_ROWS / BLOCK_NB_ROWS;
+
+        char * buffered_block = ALLOCATE_MATRIX(BLOCK_NB_ROWS, COLUMNS);
+        char * transposed_block = ALLOCATE_MATRIX(BLOCK_NB_ROWS, COLUMNS);
+
+        std::cout << "Block size: " << BLOCK_SIZE << std::endl;
+        std::cout << "Rows per block: " << BLOCK_NB_ROWS << std::endl;
+        std::cout << "Number of blocks: " << NB_BLOCKS << std::endl;
 
         //Reorder all matrices
         for(unsigned i = 0; i < MATRICES.size(); i++)
         {
             std::cout << "Reordering matrix '" << MATRICES[i] << "' " << (i+1) << "/" << MATRICES.size() << " ... " << std::endl;
+            START_TIMER;
 
             fd = open(MATRICES[i].c_str(), O_RDWR);
             mapped_file = (char*)mmap(nullptr, OVERSHOOT_FILE_SIZE, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
 
             if(mapped_file == MAP_FAILED)
                 throw std::runtime_error("mmap() failed");
-            
+
             //Tell system that data will be accessed randomly
-            posix_madvise(mapped_file, OVERSHOOT_FILE_SIZE, POSIX_MADV_NORMAL);
+            posix_madvise(mapped_file, OVERSHOOT_FILE_SIZE, POSIX_MADV_SEQUENTIAL);
             
-            std::cout << "\tTranspose matrix for reordering columns ... ";
-            START_TIMER;
-            __sse_trans(reinterpret_cast<const std::uint8_t*>(mapped_file+HEADER), reinterpret_cast<std::uint8_t*>(transposed_matrix), OVERSHOOT_NB_ROWS, COLUMNS);
-            END_TIMER; SHOW_TIMER;
+            for(std::size_t b = 0; b < NB_BLOCKS; ++b)
+            {
+                //Copy block from disk to memory
+                std::memcpy(buffered_block, mapped_file+HEADER+b*BLOCK_SIZE, BLOCK_SIZE);
 
-            //Reorder matrix columns (transposed matrix rows)
-            std::cout << "\tReordering matrix columns ... ";
-            START_TIMER;
-            reorder_matrix_rows(transposed_matrix, 0, OVERSHOOT_NB_ROWS/8, ROW_LENGTH*8, order);
-            END_TIMER; SHOW_TIMER;
+                //Transpose matrix block
+                __sse_trans(reinterpret_cast<const std::uint8_t*>(buffered_block), reinterpret_cast<std::uint8_t*>(transposed_block), BLOCK_NB_ROWS, COLUMNS);
 
-            std::cout << "\tTranspose matrix back ... ";
-            //Transpose back (overshooted rows will be written back in memory mapped overshoot but won't be added to file, that's how mmap works with overshoot memory)
-            START_TIMER;
-            __sse_trans(reinterpret_cast<const std::uint8_t*>(transposed_matrix), reinterpret_cast<std::uint8_t*>(mapped_file+HEADER), COLUMNS, OVERSHOOT_NB_ROWS);
-            END_TIMER; SHOW_TIMER;
-            
+                //Reorder block columns (by reordering transposed block rows)
+                reorder_matrix_rows(transposed_block, 0, BLOCK_NB_ROWS/8, COLUMNS, order);
+
+                //Transpose matrix block back
+                __sse_trans(reinterpret_cast<const std::uint8_t*>(transposed_block), reinterpret_cast<std::uint8_t*>(buffered_block), COLUMNS, BLOCK_NB_ROWS);
+
+                //Copy block from memory to disk
+                std::memcpy(mapped_file+HEADER+b*BLOCK_SIZE, buffered_block, BLOCK_SIZE);
+            }
+
             //Unmap file in memory and close file descriptor 
             munmap(mapped_file, OVERSHOOT_FILE_SIZE);
             close(fd);
+
+            END_TIMER; SHOW_TIMER;
         }
         
-        delete[] transposed_matrix;
+        delete[] buffered_block;
+        delete[] transposed_block;
+        
         std::cout << std::endl;
     }
 };
