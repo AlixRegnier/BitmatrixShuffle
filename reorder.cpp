@@ -9,6 +9,7 @@
                   __integral_time = static_cast<std::size_t>(std::chrono::duration_cast<std::chrono::milliseconds>(__stop_timer - __start_timer).count()); \
                   std::cout << std::setprecision(3) << (__integral_time / 1000.0) << "s" << std::endl
 
+#define ALLOCATE_MATRIX(nrows, ncols) new char[(nrows)*(ncols/8)]
 
 namespace Reorder 
 {
@@ -473,6 +474,9 @@ namespace Reorder
         //Compute overshooted file size
         const std::size_t OVERSHOOT_FILE_SIZE = HEADER + OVERSHOOT_NB_ROWS * ROW_LENGTH;
 
+        transposed_matrix = ALLOCATE_MATRIX(OVERSHOOT_NB_ROWS, COLUMNS);
+        char * buffered_matrix = ALLOCATE_MATRIX(OVERSHOOT_NB_ROWS, COLUMNS);
+
         //Reorder all matrices
         for(unsigned i = 0; i < MATRICES.size(); i++)
         {
@@ -490,7 +494,8 @@ namespace Reorder
             
             std::cout << "\tTranspose matrix for reordering columns ... ";
             START_TIMER;
-            transposed_matrix = get_transposed_matrix(mapped_file, HEADER, ROW_LENGTH, OVERSHOOT_NB_ROWS);
+            std::memcpy(buffered_matrix, reinterpret_cast<const std::uint8_t*>(mapped_file+HEADER), COLUMNS*OVERSHOOT_NB_ROWS/8);
+            __sse_trans(reinterpret_cast<const std::uint8_t*>(buffered_matrix), reinterpret_cast<std::uint8_t*>(transposed_matrix), OVERSHOOT_NB_ROWS, COLUMNS);
             END_TIMER;
 
             //Reorder matrix columns (transposed matrix rows)
@@ -502,16 +507,26 @@ namespace Reorder
             std::cout << "\tTranspose matrix back ... ";
             //Transpose back (overshooted rows will be written back in memory mapped overshoot but won't be added to file, that's how mmap works with overshoot memory)
             START_TIMER;
-            __sse_trans(reinterpret_cast<const std::uint8_t*>(transposed_matrix), reinterpret_cast<std::uint8_t*>(mapped_file+HEADER), ROW_LENGTH*8, OVERSHOOT_NB_ROWS);
+            __sse_trans(reinterpret_cast<const std::uint8_t*>(transposed_matrix), reinterpret_cast<std::uint8_t*>(buffered_matrix), COLUMNS, OVERSHOOT_NB_ROWS);
+            std::memcpy(mapped_file+HEADER, buffered_matrix, COLUMNS*OVERSHOOT_NB_ROWS/8);
             END_TIMER;
-            delete[] transposed_matrix;
 
             //Unmap file in memory and close file descriptor 
             munmap(mapped_file, OVERSHOOT_FILE_SIZE);
             close(fd);
         }
 
+        delete[] transposed_matrix;
+        delete[] buffered_matrix;
         std::cout << std::endl;
+    }
+
+    std::size_t estimate_computations(std::size_t n1, std::size_t n2, std::size_t x1)
+    {
+        #define OMEGA(n) ((n)*std::log2((n)))
+        #define BIGO(n)  (((n)*((n)-1))/2.0)
+
+        return (std::size_t)(OMEGA(n2) + (BIGO(n2)-OMEGA(n2))/(BIGO(n1)-OMEGA(n1)) * (x1-OMEGA(n1)));
     }
 
     void TSP_NN(const char* const transposed_matrix, const unsigned COLUMNS, const unsigned GROUPSIZE, const std::size_t SUBSAMPLED_ROWS, std::vector<unsigned>& order)
@@ -520,10 +535,10 @@ namespace Reorder
 
         unsigned last_group_size;
 
-        std::cout << "Estimate VPTree behaviour on dataset ... ";
+        std::cout << "Estimate VPTree behaviour on dataset ... " << std::endl;
         START_TIMER;
         {
-            const unsigned TMP_SIZE = std::min((unsigned)2048, GROUPSIZE);
+            const unsigned TMP_SIZE = std::min((unsigned)4096, GROUPSIZE);
             std::vector<unsigned> tmp_order;
             tmp_order.resize(TMP_SIZE);
 
@@ -535,8 +550,10 @@ namespace Reorder
             std::size_t computed_distances = build_double_end_NN(transposed_matrix, tmp_distMatrix, SUBSAMPLED_ROWS, 0, tmp_order);
 
             const unsigned TMP_MAX_DIST = TMP_SIZE*(TMP_SIZE-1)/2;
-            std::cout << "Computed distances and bounds: " << TMP_SIZE*std::log2(TMP_SIZE) << " <= " << computed_distances << " <= " << TMP_MAX_DIST << std::endl;
+            std::cout << "Computed distances and bounds: " << (std::size_t)(TMP_SIZE*std::log2(TMP_SIZE)) << " <= " << computed_distances << " <= " << TMP_MAX_DIST << std::endl;
             std::cout << "Proportion: " << (1.0*computed_distances)/TMP_MAX_DIST*100.0 << std::endl;
+            std::cout << "Estimated distance computations for " << COLUMNS << ": " << estimate_computations(TMP_SIZE, COLUMNS, computed_distances) << std::endl;
+            std::cout << "Estimated distance computations for " << COLUMNS << ": " << (std::size_t)(estimate_computations(TMP_SIZE, COLUMNS, computed_distances) / std::sqrt(1.0*COLUMNS/TMP_SIZE)) << " (corrected)" << std::endl;
         }
         END_TIMER;
         
