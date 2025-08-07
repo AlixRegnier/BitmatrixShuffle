@@ -497,11 +497,10 @@ namespace Reorder
     }
 };
 
-std::string trim(const std::string& line, const std::string& characters)
+std::string trimEnd(const std::string& line, const std::string& characters)
 {
-    std::size_t start = line.find_first_not_of(characters);
     std::size_t end = line.find_last_not_of(characters);
-    return start == end ? "" : line.substr(start, end - start + 1);
+    return end == std::string::npos ? "" : line.substr(0, end + 1);
 }
 
 //Function mapping byte inner bits position (MSB position is 0, LSB position is 7) to reversed order
@@ -574,7 +573,7 @@ int main(int argc, char ** argv)
         }
 
         // Get required argument
-        index_path = trim(args["index"].as<std::string>(), "/");
+        index_path = trimEnd(args["index"].as<std::string>(), "/");
         
         // Validate that index path exists and is a directory
         if (!std::filesystem::exists(index_path)) 
