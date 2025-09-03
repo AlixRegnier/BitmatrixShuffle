@@ -15,53 +15,53 @@
 
 namespace Reorder 
 {
-    // from https://mischasan.wordpress.com/2011/10/03/the-full-sse2-bit-matrix-transpose-routine/
+    // Adapted to AVX2 from https://mischasan.wordpress.com/2011/10/03/the-full-sse2-bit-matrix-transpose-routine/
     #define INP(x, y) inp[(x)*ncols/8 + (y)/8]
     #define OUT(x, y) out[(y)*nrows/8 + (x)/8]
     
     // II is defined as either (i) or (i ^ 7); i for LSB first, i^7 for MSB first
     #define II (i^7) 
 
-    void __sse_trans(std::uint8_t const *inp, std::uint8_t *out, long nrows, long ncols)
+    void __avx2_trans(std::uint8_t const *inp, std::uint8_t *out, long nrows, long ncols)
     {
         ssize_t rr, cc, i, h;
         union
         {
-            __m128i x;
-            std::uint8_t b[16];
+            __m256i x;
+            std::uint8_t b[32];
         } tmp;
 
         if(nrows % 8 != 0 || ncols % 8 != 0)
             throw std::invalid_argument("Matrix transposition: Number of columns and of rows must be both multiple of 8.");
     
-        // Do the main body in 16x8 blocks:
-        for ( rr = 0; rr + 16 <= nrows; rr += 16 )
+        // Do the main body in 32x8 blocks:
+        for ( rr = 0; rr + 32 <= nrows; rr += 32 )
         {
             for ( cc = 0; cc < ncols; cc += 8 )
             {
-                for ( i = 0; i < 16; ++i )
+                for ( i = 0; i < 32; ++i )
                     tmp.b[i] = INP(rr + II, cc);
-                for ( i = 8; --i >= 0; tmp.x = _mm_slli_epi64(tmp.x, 1))
-                    *(std::uint16_t *) &OUT(rr, cc + II) = _mm_movemask_epi8(tmp.x);
+                for ( i = 8; --i >= 0; tmp.x = _mm256_slli_epi64(tmp.x, 1))
+                    *(std::uint32_t *) &OUT(rr, cc + II) = _mm256_movemask_epi8(tmp.x);
             }
         }
     
-        if ( nrows % 16 == 0 )
+        if ( nrows % 32 == 0 )
             return;
-        rr = nrows - nrows % 16;
+        rr = nrows - nrows % 32;
     
-        // The remainder is a block of 8x(16n+8) bits (n may be 0).
+        // The remainder is a block of 8x(32n+8) bits (n may be 0).
         //  Do a PAIR of 8x8 blocks in each step:
-        for ( cc = 0; cc + 16 <= ncols; cc += 16 )
+        for ( cc = 0; cc + 32 <= ncols; cc += 32 )
         {
             for ( i = 0; i < 8; ++i )
             {
-                tmp.b[i] = h = *(std::uint16_t const *) &INP(rr + II, cc);
+                tmp.b[i] = h = *(std::uint32_t const *) &INP(rr + II, cc);
                 tmp.b[i + 8] = h >> 8;
             }
-            for ( i = 8; --i >= 0; tmp.x = _mm_slli_epi64(tmp.x, 1))
+            for ( i = 8; --i >= 0; tmp.x = _mm256_slli_epi64(tmp.x, 1))
             {
-                OUT(rr, cc + II) = h = _mm_movemask_epi8(tmp.x);
+                OUT(rr, cc + II) = h = _mm256_movemask_epi8(tmp.x);
                 OUT(rr, cc + II + 8) = h >> 8;
             }
         }
@@ -71,10 +71,10 @@ namespace Reorder
         //  Do the remaining 8x8 block:
         for ( i = 0; i < 8; ++i )
             tmp.b[i] = INP(rr + II, cc);
-        for ( i = 8; --i >= 0; tmp.x = _mm_slli_epi64(tmp.x, 1))
-            OUT(rr, cc + II) = _mm_movemask_epi8(tmp.x);
+        for ( i = 8; --i >= 0; tmp.x = _mm256_slli_epi64(tmp.x, 1))
+            OUT(rr, cc + II) = _mm256_movemask_epi8(tmp.x);
     }
-    
+
     #undef II
     #undef OUT
     #undef INP
@@ -221,39 +221,6 @@ namespace Reorder
         return nn;
     }
 
-    //SSE2 implementation of Hamming distance
-    /*size_t hamming_distance(const char* const BUFFER1, const char* const BUFFER2, const size_t LENGTH) 
-    {
-        if (BUFFER1 == nullptr || BUFFER2 == nullptr)
-            throw std::invalid_argument("Input pointers cannot be null");
-
-        std::size_t hammingDistance = 0;
-        std::size_t i = 0;
-    
-        // Process 16 bytes at a time using SSE2
-        for (; i + 16 <= LENGTH; i += 16) 
-        {
-            // Load 16 bytes from each pointer
-            __m128i xmm1 = _mm_loadu_si128(reinterpret_cast<const __m128i*>(BUFFER1 + i));
-            __m128i xmm2 = _mm_loadu_si128(reinterpret_cast<const __m128i*>(BUFFER2 + i));
-    
-            std::uint64_t* u64_1 = reinterpret_cast<std::uint64_t*>(&xmm1);
-            std::uint64_t* u64_2 = reinterpret_cast<std::uint64_t*>(&xmm2);
-            
-            hammingDistance += __builtin_popcountll(u64_1[0] ^ u64_2[0]);
-            hammingDistance += __builtin_popcountll(u64_1[1] ^ u64_2[1]);
-        }
-    
-        // Handle remaining bytes
-        for (; i < LENGTH; ++i) 
-        {
-            unsigned char x = BUFFER1[i] ^ BUFFER2[i];
-            hammingDistance += __builtin_popcount(x);
-        }
-    
-        return hammingDistance;
-    }*/
-
     //AVX2 implementation of Hamming distance
     size_t hamming_distance(const char* const BUFFER1, const char* const BUFFER2, const size_t LENGTH) 
     {
@@ -380,7 +347,7 @@ namespace Reorder
         std::cout << "Transpose submatrix from reference submatrix '" << REFERENCE_MATRIX << "\' ... ";
         START_TIMER;
         char * transposed_matrix = ALLOCATE_MATRIX(subsampled_rows, COLUMNS);
-        __sse_trans(reinterpret_cast<const std::uint8_t*>(mapped_file+HEADER), reinterpret_cast<std::uint8_t*>(transposed_matrix), subsampled_rows, COLUMNS);
+        __avx2_trans(reinterpret_cast<const std::uint8_t*>(mapped_file+HEADER), reinterpret_cast<std::uint8_t*>(transposed_matrix), subsampled_rows, COLUMNS);
         END_TIMER; SHOW_TIMER;
 
         //Approximate TSP path with double ended Nearest-Neighbor; compute order
@@ -444,13 +411,13 @@ namespace Reorder
                 std::memcpy(buffered_block, mapped_file+HEADER+b*BLOCK_SIZE, BLOCK_SIZE);
 
                 //Transpose matrix block
-                __sse_trans(reinterpret_cast<const std::uint8_t*>(buffered_block), reinterpret_cast<std::uint8_t*>(transposed_block), BLOCK_NB_ROWS, COLUMNS);
+                __avx2_trans(reinterpret_cast<const std::uint8_t*>(buffered_block), reinterpret_cast<std::uint8_t*>(transposed_block), BLOCK_NB_ROWS, COLUMNS);
 
                 //Reorder block columns (by reordering transposed block rows)
                 reorder_matrix_rows(transposed_block, 0, BLOCK_NB_ROWS/8, COLUMNS, order);
 
                 //Transpose matrix block back
-                __sse_trans(reinterpret_cast<const std::uint8_t*>(transposed_block), reinterpret_cast<std::uint8_t*>(buffered_block), COLUMNS, BLOCK_NB_ROWS);
+                __avx2_trans(reinterpret_cast<const std::uint8_t*>(transposed_block), reinterpret_cast<std::uint8_t*>(buffered_block), COLUMNS, BLOCK_NB_ROWS);
 
                 //Copy block from memory to disk
                 std::memcpy(mapped_file+HEADER+b*BLOCK_SIZE, buffered_block, BLOCK_SIZE);
