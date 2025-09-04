@@ -14,18 +14,10 @@
 #include <vector>
 
 #include <bitpermute.h>
-
-//Argument parser
-#include <cxxopts.hpp>
-
-//JSON parser
-#include <nlohmann/json.hpp>
-
-
 namespace Reorder 
 {
     //Take as input the program arguments (parsed)
-    void launch(const std::vector<std::string>& MATRICES, const unsigned SAMPLES, const unsigned HEADER, std::vector<unsigned>& order);
+    void launch(const std::vector<char*>& MATRICES, const unsigned SAMPLES, const unsigned HEADER, const char * const ORDER);
 };
 
 #endif
