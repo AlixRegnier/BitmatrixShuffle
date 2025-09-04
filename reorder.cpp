@@ -293,7 +293,7 @@ namespace Reorder
             order[i] = i;
     }
     
-    void launch(const char * const REFERENCE_MATRIX, const std::vector<std::string>& MATRICES, const unsigned SAMPLES, const unsigned HEADER, unsigned groupsize, std::size_t subsampled_rows, std::vector<unsigned>& order)
+    void launch(const char * const REFERENCE_MATRIX, const std::vector<std::string>& MATRICES, const unsigned SAMPLES, const unsigned HEADER, unsigned groupsize, std::size_t subsampled_rows, std::vector<unsigned>& order, const unsigned THREADS)
     {
         DECLARE_TIMER;
 
@@ -383,28 +383,31 @@ namespace Reorder
 
         const std::size_t NB_BLOCKS = OVERSHOOT_NB_ROWS / BLOCK_NB_ROWS;
 
-        char * buffered_block = ALLOCATE_MATRIX(BLOCK_NB_ROWS, COLUMNS);
-        char * transposed_block = ALLOCATE_MATRIX(BLOCK_NB_ROWS, COLUMNS);
-
         std::cout << "Block size: " << BLOCK_SIZE << std::endl;
         std::cout << "Rows per block: " << BLOCK_NB_ROWS << std::endl;
         std::cout << "Number of blocks: " << NB_BLOCKS << std::endl;
 
-        //Reorder all matrices
-        for(unsigned i = 0; i < MATRICES.size(); i++)
-        {
-            std::cout << "Reordering matrix '" << MATRICES[i] << "' " << (i+1) << "/" << MATRICES.size() << " ... " << std::endl;
-            START_TIMER;
 
-            fd = open(MATRICES[i].c_str(), O_RDWR);
-            mapped_file = (char*)mmap(nullptr, OVERSHOOT_FILE_SIZE, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
+        kmq::ThreadPool pool(THREADS);
+        
+        std::cout << "Reordering all partitions ... ";
+        START_TIMER;
+        
+
+        auto task = [=](unsigned partition)
+        {
+            char * buffered_block = ALLOCATE_MATRIX(BLOCK_NB_ROWS, COLUMNS);
+            char * transposed_block = ALLOCATE_MATRIX(BLOCK_NB_ROWS, COLUMNS);
+        
+            int fd = open(MATRICES[partition].c_str(), O_RDWR);
+            char * mapped_file = (char*)mmap(nullptr, OVERSHOOT_FILE_SIZE, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
 
             if(mapped_file == MAP_FAILED)
                 throw std::runtime_error("mmap() failed");
 
-            //Tell system that data will be accessed randomly
+            //Tell system that data will be accessed sequentially
             posix_madvise(mapped_file, OVERSHOOT_FILE_SIZE, POSIX_MADV_SEQUENTIAL);
-            
+
             for(std::size_t b = 0; b < NB_BLOCKS; ++b)
             {
                 //Copy block from disk to memory
@@ -427,11 +430,17 @@ namespace Reorder
             munmap(mapped_file, OVERSHOOT_FILE_SIZE);
             close(fd);
 
-            END_TIMER; SHOW_TIMER;
-        }
+            delete[] buffered_block;
+            delete[] transposed_block;
+        };
+
+        //Reorder all matrices
+        for(unsigned i = 0; i < MATRICES.size(); i++)
+            pool.add_task(std::bind(task, i));
         
-        delete[] buffered_block;
-        delete[] transposed_block;
+        pool.join_all();
+        END_TIMER; SHOW_TIMER;
+
         std::cout << std::endl;
     }
 
@@ -510,6 +519,8 @@ int main(int argc, char ** argv)
     unsigned groupsize = 0;
     std::size_t subsampled_rows = 20000;
 
+    unsigned threads = 1;
+    
     bool index_name_flag = false;
     
     try 
@@ -521,6 +532,7 @@ int main(int argc, char ** argv)
             ("n,index-name", "Index name.", cxxopts::value<std::string>())
             ("g,groupsize", "Group size {0}.", cxxopts::value<unsigned>())
             ("s,subsampled-rows", "Number of subsampled rows to compute a distance {20000}.", cxxopts::value<std::size_t>())
+            ("t,threads", "Maximum threads {1}.", cxxopts::value<unsigned>())
             ("h,help", "Print usage.");
 
         auto args = options.parse(argc, argv);
@@ -567,6 +579,9 @@ int main(int argc, char ** argv)
 
         if (args.count("subsampled-rows")) 
             subsampled_rows = args["subsampled-rows"].as<std::size_t>();
+
+        if (args.count("threads"))
+            threads = args["threads"].as<unsigned>();
 
     } 
     catch (const cxxopts::exceptions::exception& e)
@@ -658,7 +673,7 @@ int main(int argc, char ** argv)
     order.resize(columns);
 
     std::cout << "Parameters:\n\nIndex name:\t\t" << index_name << "\nSamples:\t\t" << nb_samples << std::endl;
-    Reorder::launch(reference_matrix.c_str(), matrices, nb_samples, 49, groupsize, subsampled_rows, order);
+    Reorder::launch(reference_matrix.c_str(), matrices, nb_samples, 49, groupsize, subsampled_rows, order, threads);
 
     //Serialize column order
     std::cout << "Serializing column order ..." << std::endl;
