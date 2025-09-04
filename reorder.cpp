@@ -1,67 +1,65 @@
 #include <reorder.h>
 #include <chrono>
 
-#define DECLARE_TIMER std::chrono::time_point<std::chrono::high_resolution_clock> __start_timer, __stop_timer; std::size_t __integral_time
-
+#define DECLARE_TIMER std::chrono::time_point<std::chrono::high_resolution_clock> __start_timer, __stop_timer; std::size_t __integral_time; 
 #define START_TIMER __start_timer = std::chrono::high_resolution_clock::now(); \
                     std::cout << std::flush
 
 #define END_TIMER __stop_timer = std::chrono::high_resolution_clock::now(); \
-                  __integral_time = static_cast<std::size_t>(std::chrono::duration_cast<std::chrono::milliseconds>(__stop_timer - __start_timer).count())
+                  __integral_time = static_cast<std::size_t>(std::chrono::duration_cast<std::chrono::milliseconds>(__stop_timer - __start_timer).count()); \
+                  std::cout << std::setprecision(3) << (__integral_time / 1000.0) << "s" << std::endl
 
-#define SHOW_TIMER std::cout << std::setprecision(3) << (__integral_time / 1000.0) << "s" << std::endl
-
-#define ALLOCATE_MATRIX(nrows, ncols) new char[(nrows)*(ncols/8)]
 
 namespace Reorder 
 {
-    // Adapted to AVX2 from https://mischasan.wordpress.com/2011/10/03/the-full-sse2-bit-matrix-transpose-routine/
+    // from https://mischasan.wordpress.com/2011/10/03/the-full-sse2-bit-matrix-transpose-routine/
     #define INP(x, y) inp[(x)*ncols/8 + (y)/8]
     #define OUT(x, y) out[(y)*nrows/8 + (x)/8]
     
-    // II is defined as either (i) or (i ^ 7); i for LSB first, i^7 for MSB first
+    // II is defined as either (i) or (i ^ 7);
+    // i^7 may be if we consider this bit order: [0,1,2,3,4,5,6,7][8,9,10,11,...]...
     #define II (i^7) 
 
-    void __avx2_trans(std::uint8_t const *inp, std::uint8_t *out, long nrows, long ncols)
+    void __sse_trans(std::uint8_t const *inp, std::uint8_t *out, int nrows, int ncols)
     {
         ssize_t rr, cc, i, h;
         union
         {
-            __m256i x;
-            std::uint8_t b[32];
+            __m128i x;
+            std::uint8_t b[16];
         } tmp;
 
         if(nrows % 8 != 0 || ncols % 8 != 0)
             throw std::invalid_argument("Matrix transposition: Number of columns and of rows must be both multiple of 8.");
     
-        // Do the main body in 32x8 blocks:
-        for ( rr = 0; rr + 32 <= nrows; rr += 32 )
+        // Do the main body in 16x8 blocks:
+        for ( rr = 0; rr <= nrows - 16; rr += 16 )
         {
             for ( cc = 0; cc < ncols; cc += 8 )
             {
-                for ( i = 0; i < 32; ++i )
+                for ( i = 0; i < 16; ++i )
                     tmp.b[i] = INP(rr + II, cc);
-                for ( i = 8; --i >= 0; tmp.x = _mm256_slli_epi64(tmp.x, 1))
-                    *(std::uint32_t *) &OUT(rr, cc + II) = _mm256_movemask_epi8(tmp.x);
+                for ( i = 8; --i >= 0; tmp.x = _mm_slli_epi64(tmp.x, 1))
+                    *(std::uint16_t *) &OUT(rr, cc + II) = _mm_movemask_epi8(tmp.x);
             }
         }
     
-        if ( nrows % 32 == 0 )
+        if ( nrows % 16 == 0 )
             return;
-        rr = nrows - nrows % 32;
+        rr = nrows - nrows % 16;
     
-        // The remainder is a block of 8x(32n+8) bits (n may be 0).
+        // The remainder is a block of 8x(16n+8) bits (n may be 0).
         //  Do a PAIR of 8x8 blocks in each step:
-        for ( cc = 0; cc + 32 <= ncols; cc += 32 )
+        for ( cc = 0; cc <= ncols - 16; cc += 16 )
         {
             for ( i = 0; i < 8; ++i )
             {
-                tmp.b[i] = h = *(std::uint32_t const *) &INP(rr + II, cc);
+                tmp.b[i] = h = *(std::uint16_t const *) &INP(rr + II, cc);
                 tmp.b[i + 8] = h >> 8;
             }
-            for ( i = 8; --i >= 0; tmp.x = _mm256_slli_epi64(tmp.x, 1))
+            for ( i = 8; --i >= 0; tmp.x = _mm_slli_epi64(tmp.x, 1))
             {
-                OUT(rr, cc + II) = h = _mm256_movemask_epi8(tmp.x);
+                OUT(rr, cc + II) = h = _mm_movemask_epi8(tmp.x);
                 OUT(rr, cc + II + 8) = h >> 8;
             }
         }
@@ -71,10 +69,10 @@ namespace Reorder
         //  Do the remaining 8x8 block:
         for ( i = 0; i < 8; ++i )
             tmp.b[i] = INP(rr + II, cc);
-        for ( i = 8; --i >= 0; tmp.x = _mm256_slli_epi64(tmp.x, 1))
-            OUT(rr, cc + II) = _mm256_movemask_epi8(tmp.x);
+        for ( i = 8; --i >= 0; tmp.x = _mm_slli_epi64(tmp.x, 1))
+            OUT(rr, cc + II) = _mm_movemask_epi8(tmp.x);
     }
-
+    
     #undef II
     #undef OUT
     #undef INP
@@ -221,6 +219,52 @@ namespace Reorder
         return nn;
     }
 
+    char* get_transposed_matrix(const char * const MAPPED_FILE, const unsigned HEADER, const unsigned ROW_LENGTH, const std::size_t NB_ROWS)
+    {
+        //NB_ROWS/8 is the size of a row in the transposed buffer (as rows are now columns, so the width of transposed matrix) ;; /8 to get width in bytes (=in size of char) instead of bits
+        //Transposed buffer containing concatenated columns
+        char * transposed_matrix = new char[(8*ROW_LENGTH)*(NB_ROWS/8)];
+
+
+        //Matrix transposition
+        __sse_trans(reinterpret_cast<const std::uint8_t*>(MAPPED_FILE+HEADER), reinterpret_cast<std::uint8_t*>(transposed_matrix), NB_ROWS, ROW_LENGTH*8);
+        
+        return transposed_matrix;
+    }
+
+    //SSE2 implementation of Hamming distance
+    /*size_t hamming_distance(const char* const BUFFER1, const char* const BUFFER2, const size_t LENGTH) 
+    {
+        if (BUFFER1 == nullptr || BUFFER2 == nullptr)
+            throw std::invalid_argument("Input pointers cannot be null");
+
+        std::size_t hammingDistance = 0;
+        std::size_t i = 0;
+    
+        // Process 16 bytes at a time using SSE2
+        for (; i + 16 <= LENGTH; i += 16) 
+        {
+            // Load 16 bytes from each pointer
+            __m128i xmm1 = _mm_loadu_si128(reinterpret_cast<const __m128i*>(BUFFER1 + i));
+            __m128i xmm2 = _mm_loadu_si128(reinterpret_cast<const __m128i*>(BUFFER2 + i));
+    
+            std::uint64_t* u64_1 = reinterpret_cast<std::uint64_t*>(&xmm1);
+            std::uint64_t* u64_2 = reinterpret_cast<std::uint64_t*>(&xmm2);
+            
+            hammingDistance += __builtin_popcountll(u64_1[0] ^ u64_2[0]);
+            hammingDistance += __builtin_popcountll(u64_1[1] ^ u64_2[1]);
+        }
+    
+        // Handle remaining bytes
+        for (; i < LENGTH; ++i) 
+        {
+            unsigned char x = BUFFER1[i] ^ BUFFER2[i];
+            hammingDistance += __builtin_popcount(x);
+        }
+    
+        return hammingDistance;
+    }*/
+
     //AVX2 implementation of Hamming distance
     size_t hamming_distance(const char* const BUFFER1, const char* const BUFFER2, const size_t LENGTH) 
     {
@@ -293,7 +337,7 @@ namespace Reorder
             order[i] = i;
     }
     
-    void launch(const char * const REFERENCE_MATRIX, const std::vector<std::string>& MATRICES, const unsigned SAMPLES, const unsigned HEADER, unsigned groupsize, std::size_t subsampled_rows, std::vector<unsigned>& order, const unsigned THREADS)
+    void launch(const char * const REFERENCE_MATRIX, const std::vector<char*>& MATRICES, const unsigned SAMPLES, const unsigned HEADER, const unsigned GROUPSIZE, std::size_t subsampled_rows, const char * const OUT_ORDER)
     {
         DECLARE_TIMER;
 
@@ -303,7 +347,7 @@ namespace Reorder
         if(MATRICES.size() == 0)
             throw std::invalid_argument("Got empty vector of matrix path");
         
-        if(groupsize % 8 != 0)
+        if(GROUPSIZE % 8 != 0)
             throw std::invalid_argument("The size of a group of columns must be a multiple of 8 (for transposition)");
 
         int fd = open(REFERENCE_MATRIX, O_RDONLY); //Open reference matrix in read-only
@@ -334,29 +378,23 @@ namespace Reorder
         if(subsampled_rows == 0)
             subsampled_rows = NB_ROWS / 8 * 8;
 
-        //If defined to 0: Compute one big path TSP (TODO: adapt to automatized group size according to little VPTree exp)
-        if(groupsize == 0)
-            groupsize = COLUMNS;
-
         if(subsampled_rows % 8 != 0)
             throw std::invalid_argument("The number of subsampled rows must be a multiple of 8 (for transposition)");
 
-        std::cout << "Group size:\t\t" << groupsize << "\nSubsampled rows:\t" << subsampled_rows << "\n\n";
+        std::vector<unsigned> order;
+        order.resize(COLUMNS);
 
         //Compute distance matrix
         std::cout << "Transpose submatrix from reference submatrix '" << REFERENCE_MATRIX << "\' ... ";
         START_TIMER;
-        char * transposed_matrix = ALLOCATE_MATRIX(subsampled_rows, COLUMNS);
-        __avx2_trans(reinterpret_cast<const std::uint8_t*>(mapped_file+HEADER), reinterpret_cast<std::uint8_t*>(transposed_matrix), subsampled_rows, COLUMNS);
-        END_TIMER; SHOW_TIMER;
+        char* transposed_matrix = get_transposed_matrix(mapped_file, HEADER, ROW_LENGTH, subsampled_rows);
+        END_TIMER;
 
         //Approximate TSP path with double ended Nearest-Neighbor; compute order
         std::cout << "Computing column order using TSP ... " << std::endl;
         START_TIMER;
-        TSP_NN(transposed_matrix, COLUMNS, groupsize, subsampled_rows, order);
-        END_TIMER; 
-        std::cout << "VPTree & NN path: ";
-        SHOW_TIMER;
+        TSP_NN(transposed_matrix, COLUMNS, GROUPSIZE, subsampled_rows, order);
+        END_TIMER;
 
         //Unmap reference matrix and close its file descriptor 
         munmap(mapped_file, FILE_SIZE);
@@ -367,6 +405,12 @@ namespace Reorder
         
         //Shift blank columns (when samples is not a multiple of 8) to their original location
         immutable_filling_columns_inplace(order, COLUMNS, COLUMNS-SAMPLES);
+        
+        //Serialize column order
+        std::cout << "Serializing column order ..." << std::endl;
+        int fdorder = open(OUT_ORDER, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+        write(fdorder, reinterpret_cast<const char*>(order.data()), sizeof(unsigned)*order.size());
+        close(fdorder);
 
         //Overshoot NB_ROWS to be a multiple of 8
         const std::size_t OVERSHOOT_NB_ROWS = (NB_ROWS + 7) / 8 * 8;
@@ -374,72 +418,43 @@ namespace Reorder
         //Compute overshooted file size
         const std::size_t OVERSHOOT_FILE_SIZE = HEADER + OVERSHOOT_NB_ROWS * ROW_LENGTH;
 
-        std::size_t BLOCK_SIZE = 8388608; // 8 MiB
-
-        std::size_t BLOCK_NB_ROWS = (BLOCK_SIZE+ROW_LENGTH-1) / ROW_LENGTH; //Number of rows in a block
-        BLOCK_NB_ROWS = (BLOCK_NB_ROWS+7)/8*8; //Roundup to next multiple of 8 (needed for matrix transposition)
-
-        BLOCK_SIZE = ROW_LENGTH*BLOCK_NB_ROWS; //Block size will most of time be slightly bigger than 8 MiB
-
-        const std::size_t NB_BLOCKS = OVERSHOOT_NB_ROWS / BLOCK_NB_ROWS;
-
-        std::cout << "Block size: " << BLOCK_SIZE << std::endl;
-        std::cout << "Rows per block: " << BLOCK_NB_ROWS << std::endl;
-        std::cout << "Number of blocks: " << NB_BLOCKS << std::endl;
-
-
-        kmq::ThreadPool pool(THREADS);
-        
-        std::cout << "Reordering all partitions ... ";
-        START_TIMER;
-        
-
-        auto task = [=](unsigned partition)
+        //Reorder all matrices
+        for(unsigned i = 0; i < MATRICES.size(); i++)
         {
-            char * buffered_block = ALLOCATE_MATRIX(BLOCK_NB_ROWS, COLUMNS);
-            char * transposed_block = ALLOCATE_MATRIX(BLOCK_NB_ROWS, COLUMNS);
-        
-            int fd = open(MATRICES[partition].c_str(), O_RDWR);
-            char * mapped_file = (char*)mmap(nullptr, OVERSHOOT_FILE_SIZE, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
+            std::cout << "Reordering matrix '" << MATRICES[i] << "' " << (i+1) << "/" << MATRICES.size() << " ... " << std::endl;
+
+            fd = open(MATRICES[i], O_RDWR);
+            mapped_file = (char*)mmap(nullptr, OVERSHOOT_FILE_SIZE, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
 
             if(mapped_file == MAP_FAILED)
                 throw std::runtime_error("mmap() failed");
 
-            //Tell system that data will be accessed sequentially
-            posix_madvise(mapped_file, OVERSHOOT_FILE_SIZE, POSIX_MADV_SEQUENTIAL);
 
-            for(std::size_t b = 0; b < NB_BLOCKS; ++b)
-            {
-                //Copy block from disk to memory
-                std::memcpy(buffered_block, mapped_file+HEADER+b*BLOCK_SIZE, BLOCK_SIZE);
+            //Tell system that data will be accessed randomly
+            posix_madvise(mapped_file, OVERSHOOT_FILE_SIZE, POSIX_MADV_RANDOM);
+            
+            std::cout << "\tTranspose matrix for reordering columns ... ";
+            START_TIMER;
+            transposed_matrix = get_transposed_matrix(mapped_file, HEADER, ROW_LENGTH, OVERSHOOT_NB_ROWS);
+            END_TIMER;
 
-                //Transpose matrix block
-                __avx2_trans(reinterpret_cast<const std::uint8_t*>(buffered_block), reinterpret_cast<std::uint8_t*>(transposed_block), BLOCK_NB_ROWS, COLUMNS);
+            //Reorder matrix columns (transposed matrix rows)
+            std::cout << "\tReordering matrix columns ... ";
+            START_TIMER;
+            reorder_matrix_rows(transposed_matrix, 0, OVERSHOOT_NB_ROWS/8, ROW_LENGTH*8, order);
+            END_TIMER;
 
-                //Reorder block columns (by reordering transposed block rows)
-                reorder_matrix_rows(transposed_block, 0, BLOCK_NB_ROWS/8, COLUMNS, order);
-
-                //Transpose matrix block back
-                __avx2_trans(reinterpret_cast<const std::uint8_t*>(transposed_block), reinterpret_cast<std::uint8_t*>(buffered_block), COLUMNS, BLOCK_NB_ROWS);
-
-                //Copy block from memory to disk
-                std::memcpy(mapped_file+HEADER+b*BLOCK_SIZE, buffered_block, BLOCK_SIZE);
-            }
+            std::cout << "\tTranspose matrix back ... ";
+            //Transpose back (overshooted rows will be written back in memory mapped overshoot but won't be added to file, that's how mmap works with overshoot memory)
+            START_TIMER;
+            __sse_trans(reinterpret_cast<const std::uint8_t*>(transposed_matrix), reinterpret_cast<std::uint8_t*>(mapped_file+HEADER), ROW_LENGTH*8, OVERSHOOT_NB_ROWS);
+            END_TIMER;
+            delete[] transposed_matrix;
 
             //Unmap file in memory and close file descriptor 
             munmap(mapped_file, OVERSHOOT_FILE_SIZE);
             close(fd);
-
-            delete[] buffered_block;
-            delete[] transposed_block;
-        };
-
-        //Reorder all matrices
-        for(unsigned i = 0; i < MATRICES.size(); i++)
-            pool.add_task(std::bind(task, i));
-        
-        pool.join_all();
-        END_TIMER; SHOW_TIMER;
+        }
 
         std::cout << std::endl;
     }
@@ -473,264 +488,28 @@ namespace Reorder
     }
 };
 
-std::string trimEnd(const std::string& line, const std::string& characters)
-{
-    std::size_t end = line.find_last_not_of(characters);
-    return end == std::string::npos ? "" : line.substr(0, end + 1);
-}
-
-//Function mapping byte inner bits position (MSB position is 0, LSB position is 7) to reversed order
-constexpr unsigned rev8(unsigned x)
-{
-    /*
-     0 -->  7
-     1 -->  6
-     2 -->  5
-     3 -->  4
-     4 -->  3
-     5 -->  2
-     6 -->  1
-     7 -->  0
-     8 --> 15
-     9 --> 14
-    10 --> 13
-    11 --> 12
-    ...    
-    */
-
-    //Equivalent instructions (two last instructions have exactly the same assembly code)
-    //return 7 - (x % 8) + (x / 8) * 8;
-    //return 7 - (x & 0x7U) + (x / 8) * 8;
-    //return (x | 0x7U) - (x & 0x7U);
-    //return (x & ~0x7U) | ~(x & 0x7U);
-    return (x | 0x7U) - (x & 0x7U);
-}
-
-void usage()
-{
-    std::cout << "Usage: bitmatrixshuffle -i <index> [-n <index_name>] [-g <groupsize>] [-s <subsampled_rows>]\n\n-i, --index STR\t\t\tPath to kmindex index directory.\n-g, --groupsize INT\t\tGroup size {0}.\n-n, --index-name STR\t\tIndex name.\n-s, --subsampled-rows INT\tNumber of subsampled rows to compute a distance {20000}.\n\n-h, --help\t\t\tPrint this help.\n";
-}
-
 int main(int argc, char ** argv)
 {
-    std::string index_path;
-    std::string index_name;
-
-    unsigned groupsize = 0;
-    std::size_t subsampled_rows = 20000;
-
-    unsigned threads = 1;
-    
-    bool index_name_flag = false;
-    
-    try 
+    if(argc < 8)
     {
-        cxxopts::Options options("BitmatrixShuffle", "Program reordering bitmatrix columns in a more compressive way (path TSP using Nearest-Neighbor)\n");
-        
-        options.add_options()
-            ("i,index", "Path to kmindex index directory.", cxxopts::value<std::string>())
-            ("n,index-name", "Index name.", cxxopts::value<std::string>())
-            ("g,groupsize", "Group size {0}.", cxxopts::value<unsigned>())
-            ("s,subsampled-rows", "Number of subsampled rows to compute a distance {20000}.", cxxopts::value<std::size_t>())
-            ("t,threads", "Maximum threads {1}.", cxxopts::value<unsigned>())
-            ("h,help", "Print usage.");
-
-        auto args = options.parse(argc, argv);
-
-        if (args.count("help"))
-        {
-            usage();
-            return 0;
-        }
-
-        // Check required argument
-        if (!args.count("index"))
-        {
-            std::cerr << "Error: -i/--index is required\n";
-            usage();
-            return 1;
-        }
-
-        // Get required argument
-        index_path = trimEnd(args["index"].as<std::string>(), "/");
-        
-        // Validate that index path exists and is a directory
-        if (!std::filesystem::exists(index_path)) 
-        {
-            std::cerr << "Error: Index directory '" << index_path << "' does not exist\n";
-            return 2;
-        }
-        
-        if (!std::filesystem::is_directory(index_path))
-        {
-            std::cerr << "Error: Index path '" << index_path << "' is not a directory\n";
-            return 2;
-        }
-
-        if(args.count("index-name"))
-        {
-            index_name = args["index-name"].as<std::string>();
-            index_name_flag = true;
-        }
-
-        // Get optional arguments
-        if (args.count("groupsize"))
-            groupsize = args["groupsize"].as<unsigned>();
-
-        if (args.count("subsampled-rows")) 
-            subsampled_rows = args["subsampled-rows"].as<std::size_t>();
-
-        if (args.count("threads"))
-            threads = args["threads"].as<unsigned>();
-
-    } 
-    catch (const cxxopts::exceptions::exception& e)
-    {
-        std::cerr << "Error parsing options: " << e.what() << std::endl;
-        return 2;
-    } 
-    catch (const std::exception& e)
-    {
-        std::cerr << "Error: " << e.what() << std::endl;
-        return 2;
+        std::cout << "Usage: reorder <ref_matrix> <samples> <header> <groupsize> <subsampled_rows> <out_column_order> <matrices...>\n\nref_matrix\t\tMatrix that will be used to compute path TSP\nsamples\t\t\tThe number of samples in a matrix (will be set to the upper multiple of 8 if given number is not a multiple of 8)\nheader\t\t\tSize of a matrix header (49 for kmtricks)\ngroupsize\t\tGroup of columns to reorder (must be a multiple of 8)\nsubsampled_rows\t\tNumber of rows to be subsampled (30.000 should be suffisant). 0 for all.\nout_column_order\tBinary serialized column order computed from reference matrix\nout_row_order\t\tBinary serialized row order computed for each matrix\nmatrices\t\tAll matrices which columns will be reordered according to a same order (computed from reference matrix).\n\t\t\tWarning: all matrices must have the same size.\n\n";
+        return 1;
     }
 
     RNG::set_seed(42);
 
-    std::string json_path = index_path + "/index.json";
+    char* reference_matrix = argv[1];
+    unsigned samples = (unsigned)atol(argv[2]);
+    unsigned header = (unsigned)atol(argv[3]);
+    unsigned groupsize = (unsigned)atol(argv[4]);
+    std::size_t subsampled_rows = (std::size_t)atoll(argv[5]);
+    char* out_order = argv[6];
 
-    //Open file descriptor on input json file
-    std::ifstream fdin(json_path);
+    std::vector<char*> matrices;
+    matrices.resize(argc - 7);
 
-    if(!fdin.is_open())
-    {
-        std::cerr << "Error: Could not read file '" << json_path << "'\n";
-        return 2;
-    }
+    for(int i = 7; i < argc; ++i)
+        matrices[i-7] = argv[i];
 
-    //Deserialize JSON file
-    json indexjson = json::parse(fdin);
-    fdin.close();
-    
-    //Check if JSON file has "index" as 0-depth key
-    if(!indexjson.contains("index"))
-        throw std::runtime_error("Index was not recognized.");
-
-    //If no index name specified, find the first one
-    if(!index_name_flag)
-    {
-        auto kv = indexjson["index"].items();
-
-        if(kv.begin() == kv.end())
-        {
-            std::cerr << "Error: No registered index found in 'index.json'\n";
-            return 2;
-        }
-
-        index_name = kv.begin().key();
-    }
-    //Check if JSON file -> ["index"] has <index_name> as key
-    else if(!indexjson["index"].contains(index_name))
-        throw std::runtime_error("Index '" + index_name + "' doesn't exist");
-
-    if(!indexjson["index"][index_name].contains("nb_samples"))
-        throw std::runtime_error("Index '" + index_name + "' has no field 'nb_samples'");
-
-    if(!indexjson["index"][index_name].contains("nb_partitions"))
-        throw std::runtime_error("Index '" + index_name + "' has no field 'nb_partitions'");
-
-    //Get current number of samples
-    unsigned nb_samples = indexjson["index"][index_name]["nb_samples"].get<unsigned>();
-
-    unsigned columns = (nb_samples+7) / 8 * 8;
-    
-    //Get current number of partitions
-    unsigned nb_partitions = indexjson["index"][index_name]["nb_partitions"].get<unsigned>();
-
-
-    //Select random reference partition (excepted 0)
-    unsigned reference_partition = RNG::rand_uint32_t(1, nb_partitions);
-
-    //Check each partitions
-    std::vector<std::string> matrices;
-    matrices.reserve(nb_partitions);
-
-    for(unsigned i = 0; i < nb_partitions; ++i)
-    {
-        std::string p = index_path + "/" + index_name + "/matrices/matrix_" + std::to_string(i) + ".cmbf";
-
-        if(std::filesystem::exists(p))
-            matrices.push_back(p);
-        else
-            std::cout << "File '" + p + "' does not exist (skipped)\n";
-    }
-
-
-    std::string reference_matrix = index_path + "/" + index_name + "/matrices/matrix_" + std::to_string(reference_partition) + ".cmbf";
-    std::string out_order = index_path + "/" + index_name + "/order.bin";
-
-    std::vector<unsigned> order;
-    order.resize(columns);
-
-    std::cout << "Parameters:\n\nIndex name:\t\t" << index_name << "\nSamples:\t\t" << nb_samples << std::endl;
-    Reorder::launch(reference_matrix.c_str(), matrices, nb_samples, 49, groupsize, subsampled_rows, order, threads);
-
-    //Serialize column order
-    std::cout << "Serializing column order ..." << std::endl;
-    int fdorder = open(out_order.c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0644);
-    write(fdorder, reinterpret_cast<const char*>(order.data()), sizeof(unsigned)*order.size());
-    close(fdorder);
-
-
-    std::cout << "Reorder JSON samples order ..." << std::endl;
-
-    //Read samples from index.json and put them in a vector
-    std::vector<std::string> samples = indexjson["index"][index_name]["samples"].get<std::vector<std::string>>();
-
-    //Replace each element by the one that should be placed according to the permutation
-    for(unsigned i = 0; i < nb_samples; ++i)
-        indexjson["index"][index_name]["samples"][i] = samples[rev8(order[rev8(i)])];
-
-    //Apply modifications to JSON file
-    std::ofstream fdout(json_path, std::ofstream::out);
-    fdout << std::setw(4) << indexjson << std::endl;
-    fdout.close();
-
-    //Clear JSON object
-    indexjson.clear();
-
-    std::cout << "Reorder FOF samples order ..." << std::endl;
-
-    //Modify kmindex FOF
-    std::string fof_path = index_path + "/" + index_name + "/kmtricks.fof";
-
-    std::ifstream ifdfof(fof_path);
-    
-    if (!ifdfof.is_open()) 
-    {
-        std::cerr << "Error: Could not read file '" << fof_path << "'\n";
-        return 2;
-    }
-
-    //Store all lines
-    unsigned i = 0;
-    std::string line;
-    while (std::getline(ifdfof, line) && i < nb_samples)
-        samples[i++] = line;
-
-    ifdfof.close();
-    std::ofstream ofdfof(fof_path);
-
-    if (!ofdfof.is_open()) 
-    {
-        std::cerr << "Error: Could not write file '" << fof_path << "'\n";
-        return 2;
-    }
-
-    for(i = 0; i < nb_samples; ++i)
-        ofdfof << samples[rev8(order[rev8(i)])] << '\n';
-
-    ofdfof.close();
+    Reorder::launch(reference_matrix, matrices, samples, header, groupsize, subsampled_rows, out_order);
 }
-
-#undef ALLOCATE_MATRIX

@@ -27,16 +27,6 @@
 //Bit permutation
 #include <bitpermute.h>
 
-#include <threadpool.h>
-
-//Argument parser
-#include <cxxopts.hpp>
-
-//JSON parser
-#include <nlohmann/json.hpp>
-
-using json = nlohmann::json;
-
 namespace Reorder 
 {
     struct
@@ -58,6 +48,9 @@ namespace Reorder
     //Nearest-Neighbor
     IndexDistance find_closest_vertex(VPTree<unsigned>& VPTREE, const unsigned VERTEX, const std::vector<bool>& ALREADY_ADDED);
         
+    //Precall of SSE bitmatrix transposition, return a new buffer (should be free from memory when transposed bitmatrix is no longer needed)
+    char* get_transposed_matrix(const char * const MAPPED_FILE, const unsigned HEADER, const unsigned ROW_LENGTH,  const std::size_t SUBSAMPLED_ROWS);
+
     //SSE hamming distance between two buffers
     size_t hamming_distance(const char* const BUFFER1, const char* const BUFFER2, const size_t LENGTH);
     
@@ -65,7 +58,7 @@ namespace Reorder
     void immutable_filling_columns_inplace(std::vector<unsigned>& order, const unsigned COLUMNS, const unsigned FILL);
     
     //Take as input the program arguments (parsed)
-    void launch(const char * const REFERENCE_MATRIX, const std::vector<std::string>& MATRICES, const unsigned SAMPLES, const unsigned HEADER, unsigned groupsize, std::size_t subsampled_rows, std::vector<unsigned>& order, const unsigned THREADS);
+    void launch(const char * const REFERENCE_MATRIX, const std::vector<char*>& MATRICES, const unsigned SAMPLES, const unsigned HEADER, const unsigned GROUPSIZE, std::size_t subsampled_rows, const char * const OUT_ORDER, const char * const OUT_ROW_ORDER);
 
     //Start multiple path TSP instances to be solved using Nearest-Neighbor
     void TSP_NN(const char* const transposed_matrix, const unsigned COLUMNS, const unsigned GROUPSIZE, const std::size_t SUBSAMPLED_ROWS, std::vector<unsigned>& order);
