@@ -27,6 +27,8 @@
 //Bit permutation
 #include <bitpermute.h>
 
+#include <threadpool.h>
+
 //Argument parser
 #include <cxxopts.hpp>
 
@@ -63,7 +65,7 @@ namespace Reorder
     void immutable_filling_columns_inplace(std::vector<unsigned>& order, const unsigned COLUMNS, const unsigned FILL);
     
     //Take as input the program arguments (parsed)
-    void launch(const char * const REFERENCE_MATRIX, const std::vector<std::string>& MATRICES, const unsigned SAMPLES, const unsigned HEADER, unsigned groupsize, std::size_t subsampled_rows, std::vector<unsigned>& order);
+    void launch(const char * const REFERENCE_MATRIX, const std::vector<std::string>& MATRICES, const unsigned SAMPLES, const unsigned HEADER, unsigned groupsize, std::size_t subsampled_rows, std::vector<unsigned>& order, const unsigned THREADS);
 
     //Start multiple path TSP instances to be solved using Nearest-Neighbor
     void TSP_NN(const char* const transposed_matrix, const unsigned COLUMNS, const unsigned GROUPSIZE, const std::size_t SUBSAMPLED_ROWS, std::vector<unsigned>& order);
