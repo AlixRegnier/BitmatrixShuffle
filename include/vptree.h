@@ -10,7 +10,8 @@
 #include <rng.h>
 #include <utils.h>
 
-namespace Reorder {
+namespace bms 
+{
 
     template <class T>
     struct DistanceFunctions
@@ -38,9 +39,9 @@ namespace Reorder {
 
             ~VPTree();
 
-            static DistanceFunctions<T> bindDistanceFunctions(std::function<double(T, T)> computeDistFunc, std::function<double(T, T)> getDistFunc, std::function<void(T, T, double)> setDistFunc);
+            static DistanceFunctions<T> bind_distance_functions(std::function<double(T, T)> computeDistFunc, std::function<double(T, T)> getDistFunc, std::function<void(T, T, double)> setDistFunc);
 
-            void getUnvisitedNearestNeighbor(T query, const std::vector<bool>& alreadyAdded, double* tau, T* currentResult);
+            void get_unvisited_nearest_neighbor(T query, const std::vector<bool>& alreadyAdded, double* tau, T* currentResult);
     };
 }
 

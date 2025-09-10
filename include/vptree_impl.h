@@ -3,7 +3,7 @@
 
 #include <vptree.h>
 
-namespace Reorder 
+namespace bms 
 {
     template <class T>
     void VPTree<T>::init(const std::vector<T>& vertices)
@@ -18,7 +18,7 @@ namespace Reorder
         }
 
         //Select a random vertex as pivot
-        unsigned pivotIndex = RNG::rand_uint32_t(0, vertices.size());
+        std::size_t pivotIndex = RNG::rand_uint32_t(0, vertices.size());
         pivot = vertices[pivotIndex];
 
         //Distance scope
@@ -27,7 +27,7 @@ namespace Reorder
             distances.reserve(vertices.size() - 1);
 
             //Before pivot
-            for(unsigned i = 0; i < pivotIndex; ++i)
+            for(std::size_t i = 0; i < pivotIndex; ++i)
             {
                 double d = distFunc->compute(pivot, vertices[i]);
                 distFunc->store(pivot, vertices[i], d);
@@ -35,7 +35,7 @@ namespace Reorder
             }
 
             //After pivot
-            for(unsigned i = pivotIndex+1; i < vertices.size(); ++i)
+            for(std::size_t i = pivotIndex+1; i < vertices.size(); ++i)
             {
                 double d = distFunc->compute(pivot, vertices[i]);
                 distFunc->store(pivot, vertices[i], d);
@@ -53,7 +53,7 @@ namespace Reorder
         rightVertices.reserve(vertices.size()/2);
 
         //Before pivot
-        for(unsigned i = 0; i < pivotIndex; ++i)
+        for(std::size_t i = 0; i < pivotIndex; ++i)
         {
             if(distFunc->get(pivot, vertices[i]) < threshold)
                 leftVertices.push_back(vertices[i]);
@@ -62,7 +62,7 @@ namespace Reorder
         }
 
         //After pivot
-        for(unsigned i = pivotIndex+1; i < vertices.size(); ++i)
+        for(std::size_t i = pivotIndex+1; i < vertices.size(); ++i)
         {
             if(distFunc->get(pivot, vertices[i]) < threshold)
                 leftVertices.push_back(vertices[i]);
@@ -97,21 +97,21 @@ namespace Reorder
     }
 
     template <class T>
-    DistanceFunctions<T> VPTree<T>::bindDistanceFunctions(std::function<double(T, T)> computeDistFunc, std::function<double(T, T)> getDistFunc, std::function<void(T, T, double)> storeDistFunc)
+    DistanceFunctions<T> VPTree<T>::bind_distance_functions(std::function<double(T, T)> computeDistFunc, std::function<double(T, T)> getDistFunc, std::function<void(T, T, double)> storeDistFunc)
     {
         DistanceFunctions<T> df = {computeDistFunc, getDistFunc, storeDistFunc };
         return df;
     }
 
     template <class T>
-    void VPTree<T>::getUnvisitedNearestNeighbor(T query, const std::vector<bool>& alreadyAdded, double* tau, T* currentResult)
+    void VPTree<T>::get_unvisited_nearest_neighbor(T query, const std::vector<bool>& alreadyAdded, double* tau, T* currentResult)
     {
         if(query < 0)
             throw std::runtime_error("ERROR: Can't query invalid vertex");
 
         //Check if distance already has been computed
         double distance = distFunc->get(pivot, query);
-        if(distance == NULL_DISTANCE)
+        if(distance == BMS_NULL_DISTANCE)
         {
             distance = distFunc->compute(pivot, query); //Sad we have to compute it
             distFunc->store(pivot, query, distance); //Store it if needed later
@@ -126,18 +126,18 @@ namespace Reorder
         if(distance < threshold)
         {
             if(left != nullptr && !left->skip && (distance - *tau) <= threshold)
-                left->getUnvisitedNearestNeighbor(query, alreadyAdded, tau, currentResult);
+                left->get_unvisited_nearest_neighbor(query, alreadyAdded, tau, currentResult);
 
             if(right != nullptr && !right->skip && (distance + *tau) >= threshold)
-                right->getUnvisitedNearestNeighbor(query, alreadyAdded, tau, currentResult);
+                right->get_unvisited_nearest_neighbor(query, alreadyAdded, tau, currentResult);
         }
         else
         {
             if(right != nullptr && !right->skip && (distance + *tau) >= threshold)
-                right->getUnvisitedNearestNeighbor(query, alreadyAdded, tau, currentResult);
+                right->get_unvisited_nearest_neighbor(query, alreadyAdded, tau, currentResult);
 
             if(left != nullptr && !left->skip && (distance - *tau) <= threshold)
-                left->getUnvisitedNearestNeighbor(query, alreadyAdded, tau, currentResult);
+                left->get_unvisited_nearest_neighbor(query, alreadyAdded, tau, currentResult);
         }
 
         //Node can be skipped if both children can be skipped and current pivot was already added
