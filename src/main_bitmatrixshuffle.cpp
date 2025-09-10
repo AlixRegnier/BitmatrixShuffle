@@ -179,21 +179,7 @@ int main(int argc, char ** argv)
     if(reverse)
     {
         std::vector<std::uint64_t> order_tmp(order);
-        std::cout << "[";
-        for(unsigned i = 0; i + 1 < order.size(); ++i)
-        {
-            std::cout << order[i] << ", ";
-        }
-        std::cout << order[order.size()-1] << "]" << std::endl;
-
         bms::reverse_order(order_tmp, order);
-
-        std::cout << "[";
-        for(unsigned i = 0; i + 1 < order.size(); ++i)
-        {
-            std::cout << order[i] << ", ";
-        }
-        std::cout << order[order.size()-1] << "]" << std::endl;
     }
 
     if(compress)
