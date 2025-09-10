@@ -196,12 +196,12 @@ int main(int argc, char ** argv)
             config_file << "preset = 6" << std::endl;
         }
 
-        //Use default transposition block size 8MiB and apply same for compressor
+        //Reorder and compression matrix
         bms::reorder_matrix_columns_and_compress(input_path, output_path, output_path + ".ef", "config.cfg", header, columns, NB_ROWS, order, target_block_size);
     }
     else
     {
-        //Use default transposition block size 8MiB
+        //Reorder matrix
         bms::reorder_matrix_columns(input_path, header, columns, NB_ROWS, order, target_block_size); 
     }
 
