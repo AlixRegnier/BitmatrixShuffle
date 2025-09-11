@@ -11,64 +11,64 @@
 
 namespace bms
 {
-    // Adapted to AVX2 from https://mischasan.wordpress.com/2011/10/03/the-full-sse2-bit-matrix-transpose-routine/
+    // Code from https://mischasan.wordpress.com/2011/10/03/the-full-sse2-bit-matrix-transpose-routine/
     #define INP(x, y) inp[(x)*ncols/8 + (y)/8]
     #define OUT(x, y) out[(y)*nrows/8 + (x)/8]
 
     // II is defined as either (i) or (i ^ 7); i for LSB first, i^7 for MSB first
     #define II (i^7) 
 
-    void __avx2_trans(std::uint8_t const *inp, std::uint8_t *out, long nrows, long ncols)
+    void __sse2_trans(std::uint8_t const *inp, std::uint8_t *out, long nrows, long ncols)
     {
         ssize_t rr, cc, i, h;
         union
         {
-            __m256i x;
-            std::uint8_t b[32];
+            __m128i x;
+            std::uint8_t b[16];
         } tmp;
 
         if(nrows % 8 != 0 || ncols % 8 != 0)
-            throw std::invalid_argument("BMS-ERROR: Matrix transposition: Number of columns and of rows must be both multiple of 8.");
-
-        // Do the main body in 32x8 blocks:
-        for ( rr = 0; rr + 32 <= nrows; rr += 32 )
+            throw std::invalid_argument("Matrix transposition: Number of columns and of rows must be both multiple of 8.");
+    
+        // Do the main body in 16x8 blocks:
+        for ( rr = 0; rr + 16 <= nrows; rr += 16 )
         {
             for ( cc = 0; cc < ncols; cc += 8 )
             {
-                for ( i = 0; i < 32; ++i )
+                for ( i = 0; i < 16; ++i )
                     tmp.b[i] = INP(rr + II, cc);
-                for ( i = 8; --i >= 0; tmp.x = _mm256_slli_epi64(tmp.x, 1))
-                    *(std::uint32_t *) &OUT(rr, cc + II) = _mm256_movemask_epi8(tmp.x);
+                for ( i = 8; --i >= 0; tmp.x = _mm_slli_epi64(tmp.x, 1))
+                    *(std::uint16_t *) &OUT(rr, cc + II) = _mm_movemask_epi8(tmp.x);
             }
         }
-
-        if ( nrows % 32 == 0 )
+    
+        if ( nrows % 16 == 0 )
             return;
-        rr = nrows - nrows % 32;
-
-        // The remainder is a block of 8x(32n+8) bits (n may be 0).
+        rr = nrows - nrows % 16;
+    
+        // The remainder is a block of 8x(16n+8) bits (n may be 0).
         //  Do a PAIR of 8x8 blocks in each step:
-        for ( cc = 0; cc + 32 <= ncols; cc += 32 )
+        for ( cc = 0; cc + 16 <= ncols; cc += 16 )
         {
             for ( i = 0; i < 8; ++i )
             {
-                tmp.b[i] = h = *(std::uint32_t const *) &INP(rr + II, cc);
+                tmp.b[i] = h = *(std::uint16_t const *) &INP(rr + II, cc);
                 tmp.b[i + 8] = h >> 8;
             }
-            for ( i = 8; --i >= 0; tmp.x = _mm256_slli_epi64(tmp.x, 1))
+            for ( i = 8; --i >= 0; tmp.x = _mm_slli_epi64(tmp.x, 1))
             {
-                OUT(rr, cc + II) = h = _mm256_movemask_epi8(tmp.x);
+                OUT(rr, cc + II) = h = _mm_movemask_epi8(tmp.x);
                 OUT(rr, cc + II + 8) = h >> 8;
             }
         }
         if ( cc == ncols )
             return;
-
+    
         //  Do the remaining 8x8 block:
         for ( i = 0; i < 8; ++i )
             tmp.b[i] = INP(rr + II, cc);
-        for ( i = 8; --i >= 0; tmp.x = _mm256_slli_epi64(tmp.x, 1))
-            OUT(rr, cc + II) = _mm256_movemask_epi8(tmp.x);
+        for ( i = 8; --i >= 0; tmp.x = _mm_slli_epi64(tmp.x, 1))
+            OUT(rr, cc + II) = _mm_movemask_epi8(tmp.x);
     }
 
     #undef II
@@ -160,7 +160,7 @@ namespace bms
             groupsize = ROW_LENGTH * 8;
 
         char * transposed_matrix = BMS_ALLOCATE_MATRIX(subsampled_rows, ROW_LENGTH*8);
-        __avx2_trans(reinterpret_cast<const std::uint8_t*>(mapped_file+HEADER), reinterpret_cast<std::uint8_t*>(transposed_matrix), subsampled_rows, ROW_LENGTH*8);
+        __sse2_trans(reinterpret_cast<const std::uint8_t*>(mapped_file+HEADER), reinterpret_cast<std::uint8_t*>(transposed_matrix), subsampled_rows, ROW_LENGTH*8);
 
         std::size_t last_group_size;
         
@@ -207,7 +207,7 @@ namespace bms
         const std::size_t NB_BLOCKS = (NB_ROWS+BLOCK_NB_ROWS-1) / BLOCK_NB_ROWS; 
         
         //Overshoot allows to consider last block as full and to apply operations, overshooted rows won't be written 
-        const std::size_t OVERSHOOT_FILE_SIZE = HEADER + NB_BLOCKS * BLOCK_SIZE;
+        const std::size_t FILE_SIZE = HEADER + NB_ROWS * ROW_LENGTH;
 
         //Compute last block size
         std::size_t last_block_size = (NB_ROWS % BLOCK_NB_ROWS) * ROW_LENGTH;
@@ -218,13 +218,13 @@ namespace bms
         char * transposed_block = BMS_ALLOCATE_MATRIX(BLOCK_NB_ROWS, ROW_LENGTH*8);
     
         int fd = open(MATRIX_PATH.c_str(), O_RDWR);
-        char * mapped_file = (char*)mmap(nullptr, OVERSHOOT_FILE_SIZE, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
+        char * mapped_file = (char*)mmap(nullptr, FILE_SIZE, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
 
         if(mapped_file == MAP_FAILED)
             throw std::runtime_error("BMS-ERROR: mmap() failed for reordering matrix");
 
         //Tell system that data will be accessed sequentially
-        posix_madvise(mapped_file, OVERSHOOT_FILE_SIZE, POSIX_MADV_SEQUENTIAL);
+        posix_madvise(mapped_file, FILE_SIZE, POSIX_MADV_SEQUENTIAL);
 
         std::size_t i = 0;
         for(; i + 1 < NB_BLOCKS; ++i)
@@ -233,28 +233,28 @@ namespace bms
             std::memcpy(buffered_block, GET_BLOCK_PTR(i), BLOCK_SIZE);
 
             //Transpose matrix block
-            __avx2_trans(reinterpret_cast<const std::uint8_t*>(buffered_block), reinterpret_cast<std::uint8_t*>(transposed_block), BLOCK_NB_ROWS, ROW_LENGTH*8);
+            __sse2_trans(reinterpret_cast<const std::uint8_t*>(buffered_block), reinterpret_cast<std::uint8_t*>(transposed_block), BLOCK_NB_ROWS, ROW_LENGTH*8);
 
             //Reorder block columns (by reordering transposed block rows)
             reorder_matrix_rows(transposed_block, 0, BLOCK_NB_ROWS/8, ORDER);
 
             //Transpose matrix block back
-            __avx2_trans(reinterpret_cast<const std::uint8_t*>(transposed_block), reinterpret_cast<std::uint8_t*>(buffered_block), ROW_LENGTH*8, BLOCK_NB_ROWS);
+            __sse2_trans(reinterpret_cast<const std::uint8_t*>(transposed_block), reinterpret_cast<std::uint8_t*>(buffered_block), ROW_LENGTH*8, BLOCK_NB_ROWS);
 
             //Copy block from memory to disk
             std::memcpy(GET_BLOCK_PTR(i), buffered_block, BLOCK_SIZE);
         }
 
         std::memcpy(buffered_block, GET_BLOCK_PTR(i), last_block_size);
-        __avx2_trans(reinterpret_cast<const std::uint8_t*>(buffered_block), reinterpret_cast<std::uint8_t*>(transposed_block), BLOCK_NB_ROWS, ROW_LENGTH*8);
+        __sse2_trans(reinterpret_cast<const std::uint8_t*>(buffered_block), reinterpret_cast<std::uint8_t*>(transposed_block), BLOCK_NB_ROWS, ROW_LENGTH*8);
         reorder_matrix_rows(transposed_block, 0, BLOCK_NB_ROWS/8, ORDER);
-        __avx2_trans(reinterpret_cast<const std::uint8_t*>(transposed_block), reinterpret_cast<std::uint8_t*>(buffered_block), ROW_LENGTH*8, BLOCK_NB_ROWS);
+        __sse2_trans(reinterpret_cast<const std::uint8_t*>(transposed_block), reinterpret_cast<std::uint8_t*>(buffered_block), ROW_LENGTH*8, BLOCK_NB_ROWS);
         std::memcpy(GET_BLOCK_PTR(i), buffered_block, last_block_size);
 
         BMS_DELETE_MATRIX(buffered_block);
         BMS_DELETE_MATRIX(transposed_block);
 
-        munmap(mapped_file, OVERSHOOT_FILE_SIZE);
+        munmap(mapped_file, FILE_SIZE);
         close(fd);
     }
 
@@ -272,7 +272,7 @@ namespace bms
         //The last block may not be full
         const std::size_t NB_BLOCKS = (NB_ROWS+BLOCK_NB_ROWS-1) / BLOCK_NB_ROWS; 
         
-        const std::size_t OVERSHOOT_FILE_SIZE = HEADER + NB_BLOCKS * BLOCK_SIZE;
+        const std::size_t FILE_SIZE = HEADER + NB_ROWS * ROW_LENGTH;
         
         //Compute last block size
         std::size_t last_block_size = (NB_ROWS % BLOCK_NB_ROWS) * ROW_LENGTH;
@@ -285,13 +285,13 @@ namespace bms
         int fd = open(MATRIX_PATH.c_str(), O_RDONLY);
 
         //Since no modifications will be applied to original matrix, open it with MAP_PRIVATE mode
-        char * const mapped_file = (char* const)mmap(nullptr, OVERSHOOT_FILE_SIZE, PROT_READ, MAP_PRIVATE, fd, 0);
+        char * const mapped_file = (char* const)mmap(nullptr, FILE_SIZE, PROT_READ, MAP_PRIVATE, fd, 0);
 
         if(mapped_file == MAP_FAILED)
             throw std::runtime_error("BMS-ERROR: mmap() failed for reordering matrix");
 
         //Tell system that data will be accessed sequentially
-        posix_madvise(mapped_file, OVERSHOOT_FILE_SIZE, POSIX_MADV_SEQUENTIAL);
+        posix_madvise(mapped_file, FILE_SIZE, POSIX_MADV_SEQUENTIAL);
 
         BlockCompressorZSTD block_compressor(OUTPUT_PATH, OUTPUT_EF_PATH, CONFIG_PATH);
         block_compressor.write_header(mapped_file, HEADER);
@@ -304,13 +304,13 @@ namespace bms
             std::memcpy(buffered_block, GET_BLOCK_PTR(i), BLOCK_SIZE);
 
             //Transpose matrix block
-            __avx2_trans(reinterpret_cast<const std::uint8_t*>(buffered_block), reinterpret_cast<std::uint8_t*>(transposed_block), BLOCK_NB_ROWS, ROW_LENGTH*8);
+            __sse2_trans(reinterpret_cast<const std::uint8_t*>(buffered_block), reinterpret_cast<std::uint8_t*>(transposed_block), BLOCK_NB_ROWS, ROW_LENGTH*8);
 
             //Reorder block columns (by reordering transposed block rows)
             reorder_matrix_rows(transposed_block, 0, BLOCK_NB_ROWS/8, ORDER);
 
             //Transpose matrix block back
-            __avx2_trans(reinterpret_cast<const std::uint8_t*>(transposed_block), reinterpret_cast<std::uint8_t*>(buffered_block), ROW_LENGTH*8, BLOCK_NB_ROWS);
+            __sse2_trans(reinterpret_cast<const std::uint8_t*>(transposed_block), reinterpret_cast<std::uint8_t*>(buffered_block), ROW_LENGTH*8, BLOCK_NB_ROWS);
 
             //Bring buffered block to compressor
             block_compressor.append_block(reinterpret_cast<std::uint8_t*>(buffered_block), BLOCK_SIZE);
@@ -318,9 +318,9 @@ namespace bms
 
         //Handle last block that may be smaller, only compression step differs from loop
         std::memcpy(buffered_block, GET_BLOCK_PTR(i), last_block_size);
-        __avx2_trans(reinterpret_cast<const std::uint8_t*>(buffered_block), reinterpret_cast<std::uint8_t*>(transposed_block), BLOCK_NB_ROWS, ROW_LENGTH*8);
+        __sse2_trans(reinterpret_cast<const std::uint8_t*>(buffered_block), reinterpret_cast<std::uint8_t*>(transposed_block), BLOCK_NB_ROWS, ROW_LENGTH*8);
         reorder_matrix_rows(transposed_block, 0, BLOCK_NB_ROWS/8, ORDER);
-        __avx2_trans(reinterpret_cast<const std::uint8_t*>(transposed_block), reinterpret_cast<std::uint8_t*>(buffered_block), ROW_LENGTH*8, BLOCK_NB_ROWS);
+        __sse2_trans(reinterpret_cast<const std::uint8_t*>(transposed_block), reinterpret_cast<std::uint8_t*>(buffered_block), ROW_LENGTH*8, BLOCK_NB_ROWS);
         block_compressor.append_block(reinterpret_cast<std::uint8_t*>(buffered_block), last_block_size);
 
         //Close
@@ -328,7 +328,7 @@ namespace bms
         BMS_DELETE_MATRIX(buffered_block);
         BMS_DELETE_MATRIX(transposed_block);
 
-        munmap(mapped_file, OVERSHOOT_FILE_SIZE);
+        munmap(mapped_file, FILE_SIZE);
         close(fd);
     }
 
