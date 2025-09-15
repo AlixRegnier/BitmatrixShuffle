@@ -8,7 +8,7 @@
 
 void usage()
 {
-    std::cout << "Usage: bitmatrixshuffle -i <path> [--header <header_size>] [-c <columns>] [-g <groupsize>] [-s <subsampled_rows>] [-f <path> [-r]] [-t <path>] [--compress-to <path>]\n\n";
+    std::cout << "Usage: bitmatrixshuffle -i <path> [--header <header_size>] [-c <columns>] [-g <groupsize>] [-s <subsampled_rows>] [-f <path> [-r]] [-t <path>] [--compress-to <path>] [config-path <path>]\n\n";
 }
 
 int main(int argc, char ** argv)
@@ -19,7 +19,8 @@ int main(int argc, char ** argv)
     std::string output_ef_path;
     std::string in_order_path;
     std::string out_order_path;
-    
+    std::string config_path;
+
     unsigned header = 0;
     std::size_t groupsize = 0;
     std::size_t subsampled_rows = 20000;
@@ -45,7 +46,9 @@ int main(int argc, char ** argv)
             ("r,reverse", "Needs --from-order, should be used to retrieve original matrix")
             ("g,groupsize", "Group size {columns}. Must be a multiple of 8. By default rounded to next multiple of 8 if not yet.", cxxopts::value<std::size_t>())
             ("s,subsampled-rows", "Number of subsampled rows to compute a distance {20000}.", cxxopts::value<std::size_t>())
-            ("b,block-size", "Targeted block size for transposition and compression {8388608=8MiB}. Literals not handled yet.", cxxopts::value<std::size_t>());
+            ("b,block-size", "Targeted block size for transposition and compression {8388608=8MiB}. Literals not handled yet.", cxxopts::value<std::size_t>())
+            ("config-path", "Path to config file {config.cfg}.", cxxopts::value<std::string>());
+            
 
         auto args = options.parse(argc, argv);
 
@@ -124,6 +127,12 @@ int main(int argc, char ** argv)
         if(args.count("block-size"))
             target_block_size = args["block-size"].as<std::size_t>();
 
+
+        config_path = "config.cfg";
+        if (args.count("config-path"))
+        {
+            config_path = args["config-path"].as<std::string>();
+        }
     } 
     catch (const cxxopts::exceptions::exception& e)
     {
@@ -189,7 +198,6 @@ int main(int argc, char ** argv)
         const std::size_t BLOCK_SIZE = bms::target_block_size(columns, target_block_size); //Unused
         const std::size_t BLOCK_NB_ROWS = bms::target_block_nb_rows(columns, target_block_size);
 
-        std::string config_path = "config.cfg";
         if (!std::filesystem::exists(config_path))
         {
             std::ofstream config_file(config_path, std::ios::out);
