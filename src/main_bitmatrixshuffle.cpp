@@ -1,6 +1,7 @@
 #include <bitmatrixshuffle.h>
 #include <cxxopts.hpp>
 #include <fstream>
+#include <filesystem>
 #include <unistd.h>
 #include <fcntl.h>
 #include <stdio.h>
@@ -189,6 +190,7 @@ int main(int argc, char ** argv)
         const std::size_t BLOCK_NB_ROWS = bms::target_block_nb_rows(columns, target_block_size);
 
         std::string config_path = "config.cfg";
+        if (!std::filesystem::exists(config_path))
         {
             std::ofstream config_file(config_path, std::ios::out);
             config_file << "samples = " << columns << "\n";
