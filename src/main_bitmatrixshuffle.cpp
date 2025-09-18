@@ -7,7 +7,7 @@
 
 void usage()
 {
-    std::cout << "Usage: bitmatrixshuffle -i <path> [--header <header_size>] [-c <columns>] [-g <groupsize>] [-s <subsampled_rows>] [-f <path> [-r]] [-t <path>] [--compress-to <path>]\n\n";
+    std::cout << "Usage: bitmatrixshuffle -i <path> -c <columns> [-b <blocksize>] [--compress-to <path>] [-f <path> [-r]] [-g <groupsize>] [--header <headersize>] [-s <subsamplesize>] [-t <path>]\n\n-b, --block-size\t<int>\tTargeted block size in bytes {8388608}.\n-c, --columns\t\t<int>\tNumber of columns.\n--compress-to\t\t<str>\tWrite out permuted and compressed matrix to path.\n-f, --from-order\t<str>\tLoad permutation file from path.\n-g, --group-size\t<int>\tPartition column reordering into groups of given size {%columns%}.\n--header\t\t<int>\tInput matrix header size {0}.\n-h, --help\t\t\tPrint help.\n-i, --input\t\t<str>\tInput matrix file path.\n-r, --reverse\t\t\tRequire '-f'. Invert permutation (retrieve original matrix).\n-s, --subsample-size\t<int>\tNumber of rows to use for distance computation {20000}.\n-t, --to-order\t\t<str>\tWrite out permutation file to path.\n\n";
 }
 
 int main(int argc, char ** argv)
@@ -35,16 +35,17 @@ int main(int argc, char ** argv)
         cxxopts::Options options("BitmatrixShuffle", "Program reordering bitmatrix columns in a more compressive way (path TSP using Nearest-Neighbor)\n");
         
         options.add_options()
-            ("i,input", "Matrix to reorder.", cxxopts::value<std::string>())
-            ("header", "Matrix header size {0}.", cxxopts::value<unsigned>())
-            ("c,columns", "Matrix columns", cxxopts::value<std::size_t>())
-            ("compress-to", "Compress matrix to new file.", cxxopts::value<std::string>())
-            ("f,from-order", "Deserialized order file.", cxxopts::value<std::string>())
-            ("t,to-order", "Compute new order and serialized order to file.", cxxopts::value<std::string>())
-            ("r,reverse", "Needs --from-order, should be used to retrieve original matrix")
-            ("g,groupsize", "Group size {columns}. Must be a multiple of 8. By default rounded to next multiple of 8 if not yet.", cxxopts::value<std::size_t>())
-            ("s,subsampled-rows", "Number of subsampled rows to compute a distance {20000}.", cxxopts::value<std::size_t>())
-            ("b,block-size", "Targeted block size for transposition and compression {8388608=8MiB}. Literals not handled yet.", cxxopts::value<std::size_t>());
+            ("b,block-size", "Targeted block size in bytes {8388608}.", cxxopts::value<std::size_t>())
+            ("c,columns", "Number of columns.", cxxopts::value<std::size_t>())
+            ("compress-to", "Write out permuted and compressed matrix to path.", cxxopts::value<std::string>())
+            ("f,from-order", "Load permutation file from path.", cxxopts::value<std::string>())
+            ("g,group-size", "Partition column reordering into groups of given size {%columns%}.", cxxopts::value<std::size_t>())
+            ("header", "Input matrix header size {0}.", cxxopts::value<unsigned>())
+            ("h,help", "Print help.")
+            ("i,input", "Input matrix file path.", cxxopts::value<std::string>())
+            ("r,reverse", "Require '-f'. Invert permutation (retrieve original matrix).")
+            ("s,subsample-size", "Number of rows to use for distance computation {20000}.", cxxopts::value<std::size_t>())
+            ("t,to-order", "Write out permutation file to path.", cxxopts::value<std::string>());
 
         auto args = options.parse(argc, argv);
 
