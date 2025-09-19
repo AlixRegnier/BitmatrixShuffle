@@ -22,10 +22,10 @@ add_subdirectory(external)
 
 add_library(bms_build_type_flags INTERFACE)
 target_compile_options(bms_build_type_flags INTERFACE
-  $<$<CONFIG:Debug>:-O -g -march=native>
-  $<$<CONFIG:Release>:-O3 -DNDEBUG -march=native>
-  $<$<CONFIG:Profile>:-O3 -ggdb3 -DNDEBUG -fno-inline -march=native>
-  $<$<CONFIG:Coverage>:-O0 -g --coverage -march=native>
+  $<$<CONFIG:Debug>:-O -g -march=native -msse2 -mavx2>
+  $<$<CONFIG:Release>:-O3 -DNDEBUG -march=native -msse2 -mavx2>
+  $<$<CONFIG:Profile>:-O3 -ggdb3 -DNDEBUG -fno-inline -march=native -msse2 -mavx2>
+  $<$<CONFIG:Coverage>:-O0 -g --coverage -march=native -msse2 -mavx2>
 )
 
 include_directories(
