@@ -7,11 +7,7 @@
 
 void usage()
 {
-<<<<<<< HEAD
-    std::cout << "Usage: bitmatrixshuffle (-i | -d) <path> -c <columns> [--header <header_size>] [-g <groupsize>] [-s <subsampled_rows>] [-f <path> [-r]] [-t <path>] [--compress-to <path>]\n\n";
-=======
     std::cout << "Usage: bitmatrixshuffle -i <path> -c <columns> [-b <blocksize>] [--compress-to <path>] [-f <path> [-r]] [-g <groupsize>] [--header <headersize>] [-s <subsamplesize>] [-t <path>]\n\n-b, --block-size\t<int>\tTargeted block size in bytes {8388608}.\n-c, --columns\t\t<int>\tNumber of columns.\n--compress-to\t\t<str>\tWrite out permuted and compressed matrix to path.\n-f, --from-order\t<str>\tLoad permutation file from path.\n-g, --group-size\t<int>\tPartition column reordering into groups of given size {%columns%}.\n--header\t\t<int>\tInput matrix header size {0}.\n-h, --help\t\t\tPrint help.\n-i, --input\t\t<str>\tInput matrix file path.\n-r, --reverse\t\t\tRequire '-f'. Invert permutation (retrieve original matrix).\n-s, --subsample-size\t<int>\tNumber of rows to use for distance computation {20000}.\n-t, --to-order\t\t<str>\tWrite out permutation file to path.\n\n";
->>>>>>> b6ec2dd91fe035b9c25b9dbe4118dcace47c3db9
 }
 
 int main(int argc, char ** argv)
