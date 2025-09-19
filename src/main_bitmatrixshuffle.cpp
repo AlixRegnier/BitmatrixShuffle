@@ -7,7 +7,7 @@
 
 void usage()
 {
-    std::cout << "Usage: bitmatrixshuffle -i <path> [--header <header_size>] [-c <columns>] [-g <groupsize>] [-s <subsampled_rows>] [-f <path> [-r]] [-t <path>] [--compress-to <path>]\n\n";
+    std::cout << "Usage: bitmatrixshuffle (-i | -d) <path> -c <columns> [--header <header_size>] [-g <groupsize>] [-s <subsampled_rows>] [-f <path> [-r]] [-t <path>] [--compress-to <path>]\n\n";
 }
 
 int main(int argc, char ** argv)
@@ -38,7 +38,7 @@ int main(int argc, char ** argv)
             ("i,input", "Matrix to reorder.", cxxopts::value<std::string>())
             ("header", "Matrix header size {0}.", cxxopts::value<unsigned>())
             ("c,columns", "Matrix columns", cxxopts::value<std::size_t>())
-            ("compress-to", "Compress matrix to new file.", cxxopts::value<std::string>())
+            ("z,compress-to", "Compress matrix to new file.", cxxopts::value<std::string>())
             ("f,from-order", "Deserialized order file.", cxxopts::value<std::string>())
             ("t,to-order", "Compute new order and serialized order to file.", cxxopts::value<std::string>())
             ("r,reverse", "Needs --from-order, should be used to retrieve original matrix")
