@@ -147,11 +147,15 @@ namespace bms
 
         const char * const mapped_file = (const char * const)mmap(nullptr, FILE_SIZE, PROT_READ, MAP_PRIVATE, fd, 0);
         
+        subsampled_rows = subsampled_rows / 8 * 8;
         if(subsampled_rows == 0)
             subsampled_rows = NB_ROWS / 8 * 8;
 
         if(subsampled_rows > NB_ROWS)
             throw std::invalid_argument("BMS-ERROR: Number of subsampled rows can't be greater to the number of rows in the binary matrix. Maybe one of the parameters is wrong ?");
+
+        if(subsampled_rows % 8 != 0)
+            throw std::invalid_argument("BMS-ERROR: Number of subsampled rows is not a multiple of 8. Maybe your matrix has less than 8 rows ?");
        
         if(groupsize % 8 != 0)
             throw std::invalid_argument("BMS-ERROR: The size of a group of columns must be a multiple of 8 (for transposition)");
