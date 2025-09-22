@@ -82,8 +82,8 @@ int main(int argc, char ** argv)
         columns = args["columns"].as<std::size_t>();
 
         // Get optional arguments
-        if (args.count("groupsize"))
-            groupsize = args["groupsize"].as<std::size_t>();
+        if (args.count("group-size"))
+            groupsize = args["group-size"].as<std::size_t>();
         else
             groupsize = (columns + 7) / 8 * 8;
     
