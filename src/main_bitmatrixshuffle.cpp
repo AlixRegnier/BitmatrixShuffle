@@ -90,8 +90,8 @@ int main(int argc, char ** argv)
         if(args.count("header"))
             header = args["header"].as<unsigned>();
 
-        if (args.count("subsampled-rows")) 
-            subsampled_rows = args["subsampled-rows"].as<std::size_t>();
+        if (args.count("subsample-size")) 
+            subsampled_rows = args["subsample-size"].as<std::size_t>();
 
         if (args.count("compress-to"))
         {
