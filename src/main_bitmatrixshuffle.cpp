@@ -105,6 +105,7 @@ int main(int argc, char ** argv)
             compress = true;
 
             metrics["output_path"] = output_path;
+            metrics["output_ef_path"] = output_ef_path;
         }
 
         if(args.count("reverse"))
