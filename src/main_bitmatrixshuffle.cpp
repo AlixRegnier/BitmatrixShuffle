@@ -10,7 +10,7 @@ nlohmann::json metrics;
 
 void usage()
 {
-    std::cout << "Usage: bitmatrixshuffle -i <path> -c <columns> [-b <blocksize>] [--compress-to <path>] [-f <path> [-r]] [-g <groupsize>] [--header <headersize>] [-s <subsamplesize>] [-t <path>]\n\n-b, --block-size\t<int>\tTargeted block size in bytes {8388608}.\n-c, --columns\t\t<int>\tNumber of columns.\n--compress-to\t\t<str>\tWrite out permuted and compressed matrix to path.\n-f, --from-order\t<str>\tLoad permutation file from path.\n-g, --group-size\t<int>\tPartition column reordering into groups of given size {%columns%}.\n--header\t\t<int>\tInput matrix header size {0}.\n-h, --help\t\t\tPrint help.\n-i, --input\t\t<str>\tInput matrix file path.\n-r, --reverse\t\t\tRequire '-f'. Invert permutation (retrieve original matrix).\n-s, --subsample-size\t<int>\tNumber of rows to use for distance computation {20000}.\n-t, --to-order\t\t<str>\tWrite out permutation file to path.\n\n";
+    std::cout << "Usage: bitmatrixshuffle -i <path> -c <columns> [-b <blocksize>] [--compress-to <path>] [-f <path> [-r]] [-g <groupsize>] [--header <headersize>] [-j <path>] [-s <subsamplesize>] [-t <path>]\n\n-b, --block-size\t<int>\tTargeted block size in bytes {8388608}.\n-c, --columns\t\t<int>\tNumber of columns.\n--compress-to\t\t<str>\tWrite out permuted and compressed matrix to path.\n-f, --from-order\t<str>\tLoad permutation file from path.\n-g, --group-size\t<int>\tPartition column reordering into groups of given size {%columns%}.\n--header\t\t<int>\tInput matrix header size {0}.\n-h, --help\t\t\tPrint help.\n-i, --input\t\t<str>\tInput matrix file path.\n-r, --reverse\t\t\tRequire '-f'. Invert permutation (retrieve original matrix).\n-s, --subsample-size\t<int>\tNumber of rows to use for distance computation {20000}.\n-t, --to-order\t\t<str>\tWrite out permutation file to path.\n\n";
 }
 
 int main(int argc, char ** argv)
@@ -20,6 +20,7 @@ int main(int argc, char ** argv)
     std::string output_ef_path;
     std::string in_order_path;
     std::string out_order_path;
+    std::string json_path;
     
     unsigned header = 0;
     std::size_t groupsize = 0;
@@ -31,6 +32,7 @@ int main(int argc, char ** argv)
     bool reverse = false;
     bool serialize_order = false;
     bool deserialize_order = false;
+    bool print_json = true;
 
     try 
     {
@@ -45,6 +47,7 @@ int main(int argc, char ** argv)
             ("header", "Input matrix header size {0}.", cxxopts::value<unsigned>())
             ("h,help", "Print help.")
             ("i,input", "Input matrix file path.", cxxopts::value<std::string>())
+            ("j,json", "Output JSON file", cxxopts::value<std::string>())
             ("r,reverse", "Require '-f'. Invert permutation (retrieve original matrix).")
             ("s,subsample-size", "Number of rows to use for distance computation {20000}.", cxxopts::value<std::size_t>())
             ("t,to-order", "Write out permutation file to path.", cxxopts::value<std::string>());
@@ -84,8 +87,8 @@ int main(int argc, char ** argv)
         columns = args["columns"].as<std::size_t>();
 
         // Get optional arguments
-        if (args.count("groupsize"))
-            groupsize = args["groupsize"].as<std::size_t>();
+        if (args.count("group-size"))
+            groupsize = args["group-size"].as<std::size_t>();
         else
             groupsize = (columns + 7) / 8 * 8;
     
@@ -132,6 +135,12 @@ int main(int argc, char ** argv)
         if(args.count("block-size"))
             target_block_size = args["block-size"].as<std::size_t>();
 
+        if(args.count("json"))
+        {
+            json_path = args["json"].as<std::string>();
+            print_json = false;
+        }
+
     } 
     catch (const cxxopts::exceptions::exception& e)
     {
@@ -169,7 +178,7 @@ int main(int argc, char ** argv)
     metrics["groupsize"] = groupsize == 0 ? ROW_LENGTH*8 : (groupsize + 7) / 8 * 8;
     metrics["user_permutation"] = deserialize_order;
     metrics["invert_permutation"] = reverse;
-    metrics["is_compressed"] = true;
+    metrics["is_compressed"] = compress;
 
     DECLARE_TIMER;
 
@@ -195,7 +204,7 @@ int main(int argc, char ** argv)
         START_TIMER;
         bms::compute_order_from_matrix_columns(input_path, header, columns, NB_ROWS, groupsize, subsampled_rows, order);
         END_TIMER;
-        metrics["permutation_time"] = GET_TIMER;
+        metrics["time_permutation"] = GET_TIMER;
     }
 
     //Compute reversed order
@@ -232,7 +241,7 @@ int main(int argc, char ** argv)
         START_TIMER;
         bms::reorder_matrix_columns(input_path, header, columns, NB_ROWS, order, target_block_size); 
         END_TIMER;
-        metrics["reorder_time"] = GET_TIMER;
+        metrics["time_reorder"] = GET_TIMER;
     }
 
             
@@ -251,9 +260,14 @@ int main(int argc, char ** argv)
         close(fd);
     }
 
-    std::cout << std::hex << &metrics << std::endl;
-
-    std::ofstream json_out(output_path + ".json");
-    json_out << std::setw(4) << metrics << std::endl;
-    json_out.close();
+    if(print_json)
+    {
+        std::cout << std::setw(4) << metrics << std::endl;
+    }
+    else
+    {
+        std::ofstream json_out(json_path);
+        json_out << std::setw(4) << metrics << std::endl;
+        json_out.close();
+    }
 } 
