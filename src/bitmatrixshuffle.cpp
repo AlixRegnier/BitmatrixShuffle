@@ -136,6 +136,9 @@ namespace bms
 
     void compute_order_from_matrix_columns(const std::string& MATRIX_PATH, const unsigned HEADER, const std::size_t NB_COLS, const std::size_t NB_ROWS, std::size_t groupsize, std::size_t subsampled_rows, std::vector<std::uint64_t>& order)
     {
+        DECLARE_TIMER;
+        START_TIMER;
+
         int fd = open(MATRIX_PATH.c_str(), O_RDONLY); 
         if(fd < 0)
             throw std::runtime_error("BMS-ERROR: Failed to open a file descriptor on reference matrix");
@@ -194,6 +197,11 @@ namespace bms
         distanceMatrix.resize(last_group_size);
         computed_distances += build_double_ended_NN(transposed_matrix, distanceMatrix, subsampled_rows, offset, order);
         BMS_DELETE_MATRIX(transposed_matrix);
+        
+        END_TIMER;
+        
+        metrics["computed_distances"] = computed_distances;
+        metrics["max_computable_distances"] = (groupsize * (groupsize - 1) / 2) * (NB_GROUPS - 1) + last_group_size * (last_group_size - 1) / 2;
     }
 
     void reorder_matrix_columns(const std::string& MATRIX_PATH, const unsigned HEADER, const std::size_t NB_COLS, const std::size_t NB_ROWS, const std::vector<std::uint64_t>& ORDER, const std::size_t BLOCK_TARGET_SIZE)
@@ -264,6 +272,8 @@ namespace bms
 
     void reorder_matrix_columns_and_compress(const std::string& MATRIX_PATH, const std::string& OUTPUT_PATH, const std::string& OUTPUT_EF_PATH, const std::string& CONFIG_PATH, const unsigned HEADER, const std::size_t NB_COLS, const std::size_t NB_ROWS, const std::vector<std::uint64_t>& ORDER, std::size_t BLOCK_TARGET_SIZE)
     {
+        DECLARE_TIMER;
+
         //Get row length in bytes
         const std::size_t ROW_LENGTH = (NB_COLS + 7) / 8;
 
@@ -297,38 +307,61 @@ namespace bms
         //Tell system that data will be accessed sequentially
         posix_madvise(mapped_file, FILE_SIZE, POSIX_MADV_SEQUENTIAL);
 
+        std::size_t time_compression = 0;
+        std::size_t time_reorder = 0;
+
+        START_TIMER;
         BlockCompressorZSTD block_compressor(OUTPUT_PATH, OUTPUT_EF_PATH, CONFIG_PATH);
         block_compressor.write_header(mapped_file, HEADER);
+        END_TIMER;
+        time_compression += __integral_time;
 
         std::size_t i = 0;
         //Process each blocks except the last
         for(; i + 1 < NB_BLOCKS; ++i)
         {
+            START_TIMER;
             //Copy block from disk to memory
             std::memcpy(buffered_block, GET_BLOCK_PTR(i), BLOCK_SIZE);
-
+            
             //Transpose matrix block
             __sse2_trans(reinterpret_cast<const std::uint8_t*>(buffered_block), reinterpret_cast<std::uint8_t*>(transposed_block), BLOCK_NB_ROWS, ROW_LENGTH*8);
-
+            
             //Reorder block columns (by reordering transposed block rows)
             reorder_matrix_rows(transposed_block, 0, BLOCK_NB_ROWS/8, ORDER);
-
+            
             //Transpose matrix block back
             __sse2_trans(reinterpret_cast<const std::uint8_t*>(transposed_block), reinterpret_cast<std::uint8_t*>(buffered_block), ROW_LENGTH*8, BLOCK_NB_ROWS);
+            END_TIMER;
+            time_reorder += __integral_time;
 
             //Bring buffered block to compressor
+            START_TIMER;
             block_compressor.append_block(reinterpret_cast<std::uint8_t*>(buffered_block), BLOCK_SIZE);
+            END_TIMER;
+            time_compression += __integral_time;
         }
 
-        //Handle last block that may be smaller, only compression step differs from loop
+        //Handle last block that may be smaller, only block effective size differs
+        START_TIMER;
         std::memcpy(buffered_block, GET_BLOCK_PTR(i), last_block_size);
         __sse2_trans(reinterpret_cast<const std::uint8_t*>(buffered_block), reinterpret_cast<std::uint8_t*>(transposed_block), BLOCK_NB_ROWS, ROW_LENGTH*8);
         reorder_matrix_rows(transposed_block, 0, BLOCK_NB_ROWS/8, ORDER);
         __sse2_trans(reinterpret_cast<const std::uint8_t*>(transposed_block), reinterpret_cast<std::uint8_t*>(buffered_block), ROW_LENGTH*8, BLOCK_NB_ROWS);
+        END_TIMER;
+        time_reorder += __integral_time;
+
+        START_TIMER;
         block_compressor.append_block(reinterpret_cast<std::uint8_t*>(buffered_block), last_block_size);
 
         //Close
         block_compressor.close();
+        END_TIMER;
+        time_compression += __integral_time;
+
+        metrics["time_compression"] = time_compression / 1000.0;
+        metrics["time_reorder"] = time_reorder / 1000.0;
+        
         BMS_DELETE_MATRIX(buffered_block);
         BMS_DELETE_MATRIX(transposed_block);
 

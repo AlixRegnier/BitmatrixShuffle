@@ -5,6 +5,9 @@
 #include <fcntl.h>
 #include <stdio.h>
 
+//Initialize metrics global JSON object
+nlohmann::json metrics;
+
 void usage()
 {
     std::cout << "Usage: bitmatrixshuffle -i <path> -c <columns> [-b <blocksize>] [--compress-to <path>] [-f <path> [-r]] [-g <groupsize>] [--header <headersize>] [-s <subsamplesize>] [-t <path>]\n\n-b, --block-size\t<int>\tTargeted block size in bytes {8388608}.\n-c, --columns\t\t<int>\tNumber of columns.\n--compress-to\t\t<str>\tWrite out permuted and compressed matrix to path.\n-f, --from-order\t<str>\tLoad permutation file from path.\n-g, --group-size\t<int>\tPartition column reordering into groups of given size {%columns%}.\n--header\t\t<int>\tInput matrix header size {0}.\n-h, --help\t\t\tPrint help.\n-i, --input\t\t<str>\tInput matrix file path.\n-r, --reverse\t\t\tRequire '-f'. Invert permutation (retrieve original matrix).\n-s, --subsample-size\t<int>\tNumber of rows to use for distance computation {20000}.\n-t, --to-order\t\t<str>\tWrite out permutation file to path.\n\n";
@@ -13,7 +16,6 @@ void usage()
 int main(int argc, char ** argv)
 {    
     std::string input_path;
-    std::string compress_to;
     std::string output_path;
     std::string output_ef_path;
     std::string in_order_path;
@@ -98,6 +100,8 @@ int main(int argc, char ** argv)
             output_path = args["compress-to"].as<std::string>();
             output_ef_path = output_path + ".ef";
             compress = true;
+
+            metrics["output_path"] = output_path;
         }
 
         if(args.count("reverse"))
@@ -113,12 +117,16 @@ int main(int argc, char ** argv)
         {
             in_order_path = args["from-order"].as<std::string>();
             deserialize_order = true;
+
+            metrics["from_permutation"] = in_order_path;
         }
 
         if(args.count("to-order"))
         {
             out_order_path = args["to-order"].as<std::string>();
             serialize_order = true;
+            
+            metrics["to_permutation"] = out_order_path;
         }
 
         if(args.count("block-size"))
@@ -149,10 +157,21 @@ int main(int argc, char ** argv)
     const std::size_t FILE_SIZE = lseek(fd, 0, SEEK_END);
     close(fd);
 
-
-
+    
+    
+    
     const std::size_t ROW_LENGTH = (columns + 7) / 8;
     const std::size_t NB_ROWS = (FILE_SIZE - header) / ROW_LENGTH;
+    
+    metrics["input_matrix"] = input_path;
+    metrics["nb_rows"] = NB_ROWS;
+    metrics["nb_cols"] = ROW_LENGTH*8;
+    metrics["groupsize"] = groupsize == 0 ? ROW_LENGTH*8 : (groupsize + 7) / 8 * 8;
+    metrics["user_permutation"] = deserialize_order;
+    metrics["invert_permutation"] = reverse;
+    metrics["is_compressed"] = true;
+
+    DECLARE_TIMER;
 
     std::vector<std::uint64_t> order;
 
@@ -173,7 +192,10 @@ int main(int argc, char ** argv)
     }
     else
     {
+        START_TIMER;
         bms::compute_order_from_matrix_columns(input_path, header, columns, NB_ROWS, groupsize, subsampled_rows, order);
+        END_TIMER;
+        metrics["permutation_time"] = GET_TIMER;
     }
 
     //Compute reversed order
@@ -189,6 +211,10 @@ int main(int argc, char ** argv)
         const std::size_t BLOCK_SIZE = bms::target_block_size(columns, target_block_size); //Unused
         const std::size_t BLOCK_NB_ROWS = bms::target_block_nb_rows(columns, target_block_size);
 
+        metrics["blocksize"] = BLOCK_SIZE;
+        metrics["rows_per_block"] = BLOCK_NB_ROWS;
+        metrics["target_blocksize"] = target_block_size;
+
         std::string config_path = "config.cfg";
         {
             std::ofstream config_file(config_path, std::ios::out);
@@ -203,7 +229,10 @@ int main(int argc, char ** argv)
     else
     {
         //Reorder matrix
+        START_TIMER;
         bms::reorder_matrix_columns(input_path, header, columns, NB_ROWS, order, target_block_size); 
+        END_TIMER;
+        metrics["reorder_time"] = GET_TIMER;
     }
 
             
@@ -221,4 +250,10 @@ int main(int argc, char ** argv)
         write(fd, reinterpret_cast<char*>(order.data()), order.size()*sizeof(std::uint64_t));
         close(fd);
     }
-}
+
+    std::cout << std::hex << &metrics << std::endl;
+
+    std::ofstream json_out(output_path + ".json");
+    json_out << std::setw(4) << metrics << std::endl;
+    json_out.close();
+} 
