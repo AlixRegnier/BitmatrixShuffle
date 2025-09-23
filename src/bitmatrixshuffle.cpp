@@ -160,7 +160,7 @@ namespace bms
         if(groupsize % 8 != 0)
             throw std::invalid_argument("BMS-ERROR: The size of a group of columns must be a multiple of 8 (for transposition)");
 
-        if(groupsize == 0)
+        if(groupsize == 0 || groupsize > ROW_LENGTH*8)
             groupsize = ROW_LENGTH * 8;
 
         char * transposed_matrix = BMS_ALLOCATE_MATRIX(subsampled_rows, ROW_LENGTH*8);
