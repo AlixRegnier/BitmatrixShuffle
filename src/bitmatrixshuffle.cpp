@@ -285,6 +285,8 @@ namespace bms
 
         //The last block may not be full
         const std::size_t NB_BLOCKS = (NB_ROWS+BLOCK_NB_ROWS-1) / BLOCK_NB_ROWS; 
+
+        metrics["nb_blocks"] = NB_BLOCKS;
         
         const std::size_t FILE_SIZE = HEADER + NB_ROWS * ROW_LENGTH;
         
