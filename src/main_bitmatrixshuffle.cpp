@@ -204,10 +204,7 @@ int main(int argc, char ** argv)
     }
     else
     {
-        START_TIMER;
         bms::compute_order_from_matrix_columns(input_path, header, columns, NB_ROWS, groupsize, subsampled_rows, order);
-        END_TIMER;
-        metrics["time_permutation(s)"] = GET_TIMER;
     }
 
     //Compute reversed order

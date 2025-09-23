@@ -134,6 +134,18 @@ namespace bms
         return ROW_LENGTH * target_block_nb_rows(NB_COLS, BLOCK_TARGET_SIZE); 
     }
 
+
+    std::size_t estimate_computations(std::size_t n1, std::size_t n2, std::size_t x1)
+    {
+        #define OMEGA(n) ((n)*std::log2((n)))
+        #define BIGO(n)  (((n)*((n)-1))/2.0)
+
+        return (std::size_t)(OMEGA(n2) + (BIGO(n2)-OMEGA(n2))/(BIGO(n1)-OMEGA(n1)) * (x1-OMEGA(n1)));
+
+        #undef OMEGA
+        #undef BIGO
+    }
+
     void compute_order_from_matrix_columns(const std::string& MATRIX_PATH, const unsigned HEADER, const std::size_t NB_COLS, const std::size_t NB_ROWS, std::size_t groupsize, std::size_t subsampled_rows, std::vector<std::uint64_t>& order)
     {
         DECLARE_TIMER;
@@ -196,15 +208,75 @@ namespace bms
 
         distanceMatrix.resize(last_group_size);
         computed_distances += build_double_ended_NN(transposed_matrix, distanceMatrix, subsampled_rows, offset, order);
-        BMS_DELETE_MATRIX(transposed_matrix);
+        
         
         END_TIMER;
+        metrics["time_permutation(s)"] = GET_TIMER; 
         
         std::size_t max_computable_distances = (groupsize * (groupsize - 1) / 2) * (NB_GROUPS - 1) + last_group_size * (last_group_size - 1) / 2;
         metrics["computed_distances"] = computed_distances;
         metrics["max_computable_distances"] = max_computable_distances;
         metrics["pct_computed_distances(%)"] = 100.0 * computed_distances / max_computable_distances;
 
+        //Try distance estimation to further extract error bounds
+        #define FAKE_SIZE 4096
+        if(ROW_LENGTH*8 > FAKE_SIZE)
+        {
+            DistanceMatrix fake_distanceMatrix(FAKE_SIZE);
+            std::vector<std::uint64_t> fake_order;
+            fake_order.resize(FAKE_SIZE);
+            std::size_t fake_computed_distances = build_double_ended_NN(transposed_matrix, fake_distanceMatrix, subsampled_rows, 0, fake_order);
+            std::size_t fake_max_computable_distances = (FAKE_SIZE * (FAKE_SIZE - 1)) / 2.0;
+            metrics["fake_computed_distances"] = fake_computed_distances;
+            metrics["fake_max_computable_distances"] = fake_max_computable_distances;
+            metrics["fake_pct_computed_distances(%)"] = 100.0 * fake_computed_distances / fake_max_computable_distances;
+            
+            std::size_t estimated_computed_distances = estimate_computations(FAKE_SIZE, groupsize, fake_computed_distances) * NB_GROUPS + estimate_computations(FAKE_SIZE, last_group_size, fake_computed_distances);
+            metrics["estimated_computed_distances"] = estimated_computed_distances;
+
+            metrics["estimation_error(%)"] = 100.0 * (std::max(estimated_computed_distances, computed_distances) - std::min(estimated_computed_distances, computed_distances)) / estimated_computed_distances;
+        }
+        #undef FAKE_SIZE
+
+        double original_consecutive_distances_sum = 0.0;
+        double new_consecutive_distances_sum = 0.0;
+
+        for(unsigned i = 0; i + 1 < ROW_LENGTH*8; ++i)
+        {
+            original_consecutive_distances_sum += columns_hamming_distance(transposed_matrix, subsampled_rows, i, i+1);
+            new_consecutive_distances_sum += columns_hamming_distance(transposed_matrix, subsampled_rows, order[i], order[i+1]);
+        }
+
+        double original_consecutive_distances_average = original_consecutive_distances_sum / (ROW_LENGTH*8 - 1);
+        double new_consecutive_distances_average = new_consecutive_distances_sum / (ROW_LENGTH*8 - 1);
+
+        double original_consecutive_distances_variance = 0.0;
+        double new_consecutive_distances_variance = 0.0;
+
+        //Compute variance
+        for(unsigned i = 0; i + 1 < ROW_LENGTH*8; ++i)
+        {
+            original_consecutive_distances_variance += std::pow(columns_hamming_distance(transposed_matrix, subsampled_rows, i, i+1) - original_consecutive_distances_average, 2);
+            new_consecutive_distances_variance += std::pow(columns_hamming_distance(transposed_matrix, subsampled_rows, order[i], order[i+1]) - new_consecutive_distances_average, 2);
+        }
+
+        //N-1: fix population bias
+        original_consecutive_distances_variance /= ROW_LENGTH*8 - 2;
+        new_consecutive_distances_variance /= ROW_LENGTH*8 - 2;
+
+        //Compute stdev from variance
+        double original_consecutive_distances_stdev = std::sqrt(original_consecutive_distances_variance);
+        double new_consecutive_distances_stdev = std::sqrt(new_consecutive_distances_variance);
+
+        metrics["avg_consecutive_column_distance_original"] = original_consecutive_distances_average;
+        metrics["avg_consecutive_column_distance_reorder"] = new_consecutive_distances_average;
+        metrics["var_consecutive_column_distance_original"] = original_consecutive_distances_variance;
+        metrics["var_consecutive_column_distance_reorder"] = new_consecutive_distances_variance;
+        metrics["stdev_consecutive_column_distance_original"] = original_consecutive_distances_stdev;
+        metrics["stdev_consecutive_column_distance_reorder"] = new_consecutive_distances_stdev;
+        metrics["metric_reordering_compressibility_factor"] = 1.0 * original_consecutive_distances_average / new_consecutive_distances_average;
+
+        BMS_DELETE_MATRIX(transposed_matrix);
     }
 
     void reorder_matrix_columns(const std::string& MATRIX_PATH, const unsigned HEADER, const std::size_t NB_COLS, const std::size_t NB_ROWS, const std::vector<std::uint64_t>& ORDER, const std::size_t BLOCK_TARGET_SIZE)
