@@ -200,8 +200,11 @@ namespace bms
         
         END_TIMER;
         
+        std::size_t max_computable_distances = (groupsize * (groupsize - 1) / 2) * (NB_GROUPS - 1) + last_group_size * (last_group_size - 1) / 2;
         metrics["computed_distances"] = computed_distances;
-        metrics["max_computable_distances"] = (groupsize * (groupsize - 1) / 2) * (NB_GROUPS - 1) + last_group_size * (last_group_size - 1) / 2;
+        metrics["max_computable_distances"] = max_computable_distances;
+        metrics["pct_computed_distances(%)"] = 100.0 * computed_distances / max_computable_distances;
+
     }
 
     void reorder_matrix_columns(const std::string& MATRIX_PATH, const unsigned HEADER, const std::size_t NB_COLS, const std::size_t NB_ROWS, const std::vector<std::uint64_t>& ORDER, const std::size_t BLOCK_TARGET_SIZE)
@@ -361,8 +364,8 @@ namespace bms
         END_TIMER;
         time_compression += __integral_time;
 
-        metrics["time_compression"] = time_compression / 1000.0;
-        metrics["time_reorder"] = time_reorder / 1000.0;
+        metrics["time_compression(s)"] = time_compression / 1000.0;
+        metrics["time_reorder(s)"] = time_reorder / 1000.0;
         
         BMS_DELETE_MATRIX(buffered_block);
         BMS_DELETE_MATRIX(transposed_block);

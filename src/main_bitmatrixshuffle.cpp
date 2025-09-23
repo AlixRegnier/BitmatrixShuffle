@@ -96,10 +96,7 @@ int main(int argc, char ** argv)
             header = args["header"].as<unsigned>();
 
         if (args.count("subsampled-size")) 
-        {
             subsampled_rows = args["subsample-size"].as<std::size_t>();
-            metrics["subsample-size"] = subsampled_rows;
-        }
 
         if (args.count("compress-to"))
         {
@@ -127,6 +124,8 @@ int main(int argc, char ** argv)
 
             metrics["from_permutation"] = in_order_path;
         }
+        else
+            metrics["subsample_size"] = subsampled_rows;
 
         if(args.count("to-order"))
         {
@@ -176,7 +175,7 @@ int main(int argc, char ** argv)
     const std::size_t ROW_LENGTH = (columns + 7) / 8;
     const std::size_t NB_ROWS = (FILE_SIZE - header) / ROW_LENGTH;
     
-    metrics["input_matrix"] = input_path;
+    metrics["input_path"] = input_path;
     metrics["nb_rows"] = NB_ROWS;
     metrics["nb_cols"] = ROW_LENGTH*8;
     metrics["groupsize"] = groupsize == 0 ? ROW_LENGTH*8 : (groupsize + 7) / 8 * 8;
@@ -208,7 +207,7 @@ int main(int argc, char ** argv)
         START_TIMER;
         bms::compute_order_from_matrix_columns(input_path, header, columns, NB_ROWS, groupsize, subsampled_rows, order);
         END_TIMER;
-        metrics["time_permutation"] = GET_TIMER;
+        metrics["time_permutation(s)"] = GET_TIMER;
     }
 
     //Compute reversed order
@@ -224,9 +223,9 @@ int main(int argc, char ** argv)
         const std::size_t BLOCK_SIZE = bms::target_block_size(columns, target_block_size); //Unused
         const std::size_t BLOCK_NB_ROWS = bms::target_block_nb_rows(columns, target_block_size);
 
-        metrics["blocksize"] = BLOCK_SIZE;
+        metrics["blocksize(bytes)"] = BLOCK_SIZE;
         metrics["rows_per_block"] = BLOCK_NB_ROWS;
-        metrics["target_blocksize"] = target_block_size;
+        metrics["target_blocksize(bytes)"] = target_block_size;
 
         std::string config_path = "config.cfg";
         {
@@ -245,7 +244,7 @@ int main(int argc, char ** argv)
         START_TIMER;
         bms::reorder_matrix_columns(input_path, header, columns, NB_ROWS, order, target_block_size); 
         END_TIMER;
-        metrics["time_reorder"] = GET_TIMER;
+        metrics["time_reorder(s)"] = GET_TIMER;
     }
 
             
