@@ -194,7 +194,7 @@ int main(int argc, char ** argv)
             std::ofstream config_file(config_path, std::ios::out);
             config_file << "samples = " << columns << "\n";
             config_file << "bitvectorsperblock = " << BLOCK_NB_ROWS << "\n";
-            config_file << "preset = 6" << std::endl;
+            config_file << "preset = 3" << std::endl;
         }
 
         //Reorder and compression matrix
