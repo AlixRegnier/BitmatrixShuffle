@@ -104,8 +104,8 @@ int main(int argc, char ** argv)
             output_ef_path = output_path + ".ef";
             compress = true;
 
-            metrics["output_path"] = output_path;
-            metrics["output_ef_path"] = output_ef_path;
+            metrics["0_output_path"] = output_path;
+            metrics["0_output_ef_path"] = output_ef_path;
         }
 
         if(args.count("reverse"))
@@ -122,17 +122,17 @@ int main(int argc, char ** argv)
             in_order_path = args["from-order"].as<std::string>();
             deserialize_order = true;
 
-            metrics["from_permutation"] = in_order_path;
+            metrics["0_from_permutation"] = in_order_path;
         }
         else
-            metrics["subsample_size"] = subsampled_rows;
+            metrics["1_subsample_size"] = subsampled_rows;
 
         if(args.count("to-order"))
         {
             out_order_path = args["to-order"].as<std::string>();
             serialize_order = true;
             
-            metrics["to_permutation"] = out_order_path;
+            metrics["0_to_permutation"] = out_order_path;
         }
 
         if(args.count("block-size"))
@@ -175,13 +175,13 @@ int main(int argc, char ** argv)
     const std::size_t ROW_LENGTH = (columns + 7) / 8;
     const std::size_t NB_ROWS = (FILE_SIZE - header) / ROW_LENGTH;
     
-    metrics["input_path"] = input_path;
-    metrics["nb_rows"] = NB_ROWS;
-    metrics["nb_cols"] = ROW_LENGTH*8;
-    metrics["groupsize"] = groupsize == 0 ? ROW_LENGTH*8 : (groupsize + 7) / 8 * 8;
-    metrics["user_permutation"] = deserialize_order;
-    metrics["invert_permutation"] = reverse;
-    metrics["is_compressed"] = compress;
+    metrics["0_input_path"] = input_path;
+    metrics["1_nb_rows"] = NB_ROWS;
+    metrics["1_nb_cols"] = ROW_LENGTH*8;
+    metrics["1_groupsize"] = groupsize == 0 ? ROW_LENGTH*8 : (groupsize + 7) / 8 * 8;
+    metrics["0_user_permutation"] = deserialize_order;
+    metrics["0_invert_permutation"] = reverse;
+    metrics["0_is_compressed"] = compress;
 
     DECLARE_TIMER;
 
@@ -220,9 +220,9 @@ int main(int argc, char ** argv)
         const std::size_t BLOCK_SIZE = bms::target_block_size(columns, target_block_size); //Unused
         const std::size_t BLOCK_NB_ROWS = bms::target_block_nb_rows(columns, target_block_size);
 
-        metrics["blocksize(bytes)"] = BLOCK_SIZE;
-        metrics["rows_per_block"] = BLOCK_NB_ROWS;
-        metrics["target_blocksize(bytes)"] = target_block_size;
+        metrics["1_blocksize(bytes)"] = BLOCK_SIZE;
+        metrics["1_rows_per_block"] = BLOCK_NB_ROWS;
+        metrics["1_target_blocksize(bytes)"] = target_block_size;
 
         std::string config_path = "config.cfg";
         {
@@ -241,7 +241,7 @@ int main(int argc, char ** argv)
         START_TIMER;
         bms::reorder_matrix_columns(input_path, header, columns, NB_ROWS, order, target_block_size); 
         END_TIMER;
-        metrics["time_reorder(s)"] = GET_TIMER;
+        metrics["3_time_reorder(s)"] = GET_TIMER;
     }
 
             

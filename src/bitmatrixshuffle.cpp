@@ -211,12 +211,12 @@ namespace bms
         
         
         END_TIMER;
-        metrics["time_permutation(s)"] = GET_TIMER; 
+        metrics["3_time_permutation(s)"] = GET_TIMER; 
         
         std::size_t max_computable_distances = (groupsize * (groupsize - 1) / 2) * (NB_GROUPS - 1) + last_group_size * (last_group_size - 1) / 2;
-        metrics["computed_distances"] = computed_distances;
-        metrics["max_computable_distances"] = max_computable_distances;
-        metrics["pct_computed_distances(%)"] = 100.0 * computed_distances / max_computable_distances;
+        metrics["2a_computed_distances"] = computed_distances;
+        metrics["2a_max_computable_distances"] = max_computable_distances;
+        metrics["2a_pct_computed_distances(%)"] = 100.0 * computed_distances / max_computable_distances;
 
         //Try distance estimation to further extract error bounds
         #define FAKE_SIZE 4096
@@ -227,14 +227,14 @@ namespace bms
             fake_order.resize(FAKE_SIZE);
             std::size_t fake_computed_distances = build_double_ended_NN(transposed_matrix, fake_distanceMatrix, subsampled_rows, 0, fake_order);
             std::size_t fake_max_computable_distances = (FAKE_SIZE * (FAKE_SIZE - 1)) / 2.0;
-            metrics["fake_computed_distances"] = fake_computed_distances;
-            metrics["fake_max_computable_distances"] = fake_max_computable_distances;
-            metrics["fake_pct_computed_distances(%)"] = 100.0 * fake_computed_distances / fake_max_computable_distances;
+            metrics["2c_fake_computed_distances"] = fake_computed_distances;
+            metrics["2c_fake_max_computable_distances"] = fake_max_computable_distances;
+            metrics["2c_fake_pct_computed_distances(%)"] = 100.0 * fake_computed_distances / fake_max_computable_distances;
             
             std::size_t estimated_computed_distances = estimate_computations(FAKE_SIZE, groupsize, fake_computed_distances) * NB_GROUPS + estimate_computations(FAKE_SIZE, last_group_size, fake_computed_distances);
-            metrics["estimated_computed_distances"] = estimated_computed_distances;
+            metrics["2c_estimated_computed_distances"] = estimated_computed_distances;
 
-            metrics["estimation_error(%)"] = 100.0 * (std::max(estimated_computed_distances, computed_distances) - std::min(estimated_computed_distances, computed_distances)) / estimated_computed_distances;
+            metrics["2c_estimation_error(%)"] = 100.0 * (std::max(estimated_computed_distances, computed_distances) - std::min(estimated_computed_distances, computed_distances)) / estimated_computed_distances;
         }
         #undef FAKE_SIZE
 
@@ -268,13 +268,13 @@ namespace bms
         double original_consecutive_distances_stdev = std::sqrt(original_consecutive_distances_variance);
         double new_consecutive_distances_stdev = std::sqrt(new_consecutive_distances_variance);
 
-        metrics["avg_consecutive_column_distance_original"] = original_consecutive_distances_average;
-        metrics["avg_consecutive_column_distance_reorder"] = new_consecutive_distances_average;
-        metrics["var_consecutive_column_distance_original"] = original_consecutive_distances_variance;
-        metrics["var_consecutive_column_distance_reorder"] = new_consecutive_distances_variance;
-        metrics["stdev_consecutive_column_distance_original"] = original_consecutive_distances_stdev;
-        metrics["stdev_consecutive_column_distance_reorder"] = new_consecutive_distances_stdev;
-        metrics["metric_reordering_compressibility_factor"] = 1.0 * original_consecutive_distances_average / new_consecutive_distances_average;
+        metrics["2b_consecutive_column_distance_avg_original"] = original_consecutive_distances_average;
+        metrics["2b_consecutive_column_distance_avg_reorder"] = new_consecutive_distances_average;
+        metrics["2b_consecutive_column_distance_var_original"] = original_consecutive_distances_variance;
+        metrics["2b_consecutive_column_distance_var_reorder"] = new_consecutive_distances_variance;
+        metrics["2b_consecutive_column_distance_stdev_original"] = original_consecutive_distances_stdev;
+        metrics["2b_consecutive_column_distance_stdev_reorder"] = new_consecutive_distances_stdev;
+        metrics["2b_metric_reordering_compressibility_factor"] = 1.0 * original_consecutive_distances_average / new_consecutive_distances_average;
 
         BMS_DELETE_MATRIX(transposed_matrix);
     }
@@ -361,7 +361,7 @@ namespace bms
         //The last block may not be full
         const std::size_t NB_BLOCKS = (NB_ROWS+BLOCK_NB_ROWS-1) / BLOCK_NB_ROWS; 
 
-        metrics["nb_blocks"] = NB_BLOCKS;
+        metrics["1_nb_blocks"] = NB_BLOCKS;
         
         const std::size_t FILE_SIZE = HEADER + NB_ROWS * ROW_LENGTH;
         
@@ -436,8 +436,8 @@ namespace bms
         END_TIMER;
         time_compression += __integral_time;
 
-        metrics["time_compression(s)"] = time_compression / 1000.0;
-        metrics["time_reorder(s)"] = time_reorder / 1000.0;
+        metrics["3_time_compression(s)"] = time_compression / 1000.0;
+        metrics["3_time_reorder(s)"] = time_reorder / 1000.0;
         
         BMS_DELETE_MATRIX(buffered_block);
         BMS_DELETE_MATRIX(transposed_block);
