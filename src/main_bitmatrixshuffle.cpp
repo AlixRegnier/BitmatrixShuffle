@@ -10,7 +10,7 @@ nlohmann::json metrics;
 
 void usage()
 {
-    std::cout << "Usage: bitmatrixshuffle -i <path> -c <columns> [-b <blocksize>] [--compress-to <path>] [-f <path> [-r]] [-g <groupsize>] [--header <headersize>] [-j <path>] [-s <subsamplesize>] [-t <path>]\n\n-b, --block-size\t<int>\tTargeted block size in bytes {8388608}.\n-c, --columns\t\t<int>\tNumber of columns.\n--compress-to\t\t<str>\tWrite out permuted and compressed matrix to path.\n-f, --from-order\t<str>\tLoad permutation file from path.\n-g, --group-size\t<int>\tPartition column reordering into groups of given size {%columns%}.\n--header\t\t<int>\tInput matrix header size {0}.\n-h, --help\t\t\tPrint help.\n-i, --input\t\t<str>\tInput matrix file path.\n-r, --reverse\t\t\tRequire '-f'. Invert permutation (retrieve original matrix).\n-s, --subsample-size\t<int>\tNumber of rows to use for distance computation {20000}.\n-t, --to-order\t\t<str>\tWrite out permutation file to path.\n\n";
+    std::cout << "Usage: bitmatrixshuffle -i <path> -c <columns> [-b <blocksize>] [--compress-to <path> [-p <level>]] [-f <path> [-r]] [-g <groupsize>] [--header <headersize>] [-j <path>] [-s <subsamplesize>] [-t <path>]\n\n-b, --block-size\t<int>\tTargeted block size in bytes {8388608}.\n-c, --columns\t\t<int>\tNumber of columns.\n--compress-to\t\t<str>\tWrite out permuted and compressed matrix to path.\n-f, --from-order\t<str>\tLoad permutation file from path.\n-g, --group-size\t<int>\tPartition column reordering into groups of given size {%columns%}.\n--header\t\t<int>\tInput matrix header size {0}.\n-h, --help\t\t\tPrint help.\n-i, --input\t\t<str>\tInput matrix file path.\n-p,--preset\t\tRequire '--compress-to'. Zstd preset level [1-22] {3}.\n-r, --reverse\t\t\tRequire '-f'. Invert permutation (retrieve original matrix).\n-s, --subsample-size\t<int>\tNumber of rows to use for distance computation {20000}.\n-t, --to-order\t\t<str>\tWrite out permutation file to path.\n\n";
 }
 
 int main(int argc, char ** argv)
@@ -23,6 +23,7 @@ int main(int argc, char ** argv)
     std::string json_path;
     
     unsigned header = 0;
+    unsigned preset_level = 3;
     std::size_t groupsize = 0;
     std::size_t subsampled_rows = 20000;
     std::size_t columns;
@@ -48,6 +49,7 @@ int main(int argc, char ** argv)
             ("h,help", "Print help.")
             ("i,input", "Input matrix file path.", cxxopts::value<std::string>())
             ("j,json", "Output JSON file", cxxopts::value<std::string>())
+            ("p,preset", "Compression preset level [1-22] {3}.", cxxopts::value<unsigned>())
             ("r,reverse", "Require '-f'. Invert permutation (retrieve original matrix).")
             ("s,subsample-size", "Number of rows to use for distance computation {20000}.", cxxopts::value<std::size_t>())
             ("t,to-order", "Write out permutation file to path.", cxxopts::value<std::string>());
@@ -106,6 +108,9 @@ int main(int argc, char ** argv)
 
             metrics["0_output_path"] = output_path;
             metrics["0_output_ef_path"] = output_ef_path;
+            
+            if(args.count("preset"))
+                preset_level = args["preset"].as<unsigned>();
         }
 
         if(args.count("reverse"))
@@ -229,7 +234,7 @@ int main(int argc, char ** argv)
             std::ofstream config_file(config_path, std::ios::out);
             config_file << "samples = " << columns << "\n";
             config_file << "bitvectorsperblock = " << BLOCK_NB_ROWS << "\n";
-            config_file << "preset = 3" << std::endl;
+            config_file << "preset = " << preset_level << std::endl;
         }
 
         //Reorder and compression matrix
