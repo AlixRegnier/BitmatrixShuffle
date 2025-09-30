@@ -345,6 +345,11 @@ namespace bms
         close(fd);
     }
 
+    void __count_bytes(const std::uint8_t * bytes, const std::size_t length, std::size_t * counts)
+    {
+        for(std::size_t i = 0; i < length; ++counts[bytes[i++]]);
+    }
+
     void reorder_matrix_columns_and_compress(const std::string& MATRIX_PATH, const std::string& OUTPUT_PATH, const std::string& OUTPUT_EF_PATH, const std::string& CONFIG_PATH, const unsigned HEADER, const std::size_t NB_COLS, const std::size_t NB_ROWS, const std::vector<std::uint64_t>& ORDER, std::size_t BLOCK_TARGET_SIZE)
     {
         DECLARE_TIMER;
@@ -393,14 +398,22 @@ namespace bms
         END_TIMER;
         time_compression += __integral_time;
 
+        std::vector<std::size_t> count_bytes_original;
+        std::vector<std::size_t> count_bytes_reordered;
+        count_bytes_original.resize(256);
+        count_bytes_reordered.resize(256);
+
         std::size_t i = 0;
         //Process each blocks except the last
         for(; i + 1 < NB_BLOCKS; ++i)
         {
+            //METRIC :: COUNT_BYTES
+            __count_bytes(reinterpret_cast<std::uint8_t*>(GET_BLOCK_PTR(i)), BLOCK_SIZE, count_bytes_original.data());
+
             START_TIMER;
             //Copy block from disk to memory
             std::memcpy(buffered_block, GET_BLOCK_PTR(i), BLOCK_SIZE);
-            
+
             //Transpose matrix block
             __sse2_trans(reinterpret_cast<const std::uint8_t*>(buffered_block), reinterpret_cast<std::uint8_t*>(transposed_block), BLOCK_NB_ROWS, ROW_LENGTH*8);
             
@@ -412,6 +425,9 @@ namespace bms
             END_TIMER;
             time_reorder += __integral_time;
 
+            //METRIC :: COUNT_BYTES (reordered)
+            __count_bytes(reinterpret_cast<std::uint8_t*>(buffered_block), BLOCK_SIZE, count_bytes_reordered.data());
+
             //Bring buffered block to compressor
             START_TIMER;
             block_compressor.append_block(reinterpret_cast<std::uint8_t*>(buffered_block), BLOCK_SIZE);
@@ -419,6 +435,7 @@ namespace bms
             time_compression += __integral_time;
         }
 
+        __count_bytes(reinterpret_cast<std::uint8_t*>(GET_BLOCK_PTR(i)), last_block_size, count_bytes_original.data());
         //Handle last block that may be smaller, only block effective size differs
         START_TIMER;
         std::memcpy(buffered_block, GET_BLOCK_PTR(i), last_block_size);
@@ -427,6 +444,8 @@ namespace bms
         __sse2_trans(reinterpret_cast<const std::uint8_t*>(transposed_block), reinterpret_cast<std::uint8_t*>(buffered_block), ROW_LENGTH*8, BLOCK_NB_ROWS);
         END_TIMER;
         time_reorder += __integral_time;
+
+        __count_bytes(reinterpret_cast<std::uint8_t*>(buffered_block), last_block_size, count_bytes_reordered.data());
 
         START_TIMER;
         block_compressor.append_block(reinterpret_cast<std::uint8_t*>(buffered_block), last_block_size);
@@ -439,6 +458,9 @@ namespace bms
         metrics["3_time_compression(s)"] = time_compression / 1000.0;
         metrics["3_time_reorder(s)"] = time_reorder / 1000.0;
         
+        metrics["4_histogram_original"] = count_bytes_original;
+        metrics["4_histogram_reordered"] = count_bytes_reordered;
+
         BMS_DELETE_MATRIX(buffered_block);
         BMS_DELETE_MATRIX(transposed_block);
 
