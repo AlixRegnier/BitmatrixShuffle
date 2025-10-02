@@ -48,3 +48,4 @@ Shortname|Longname|Arg|Description
 -r|--reverse|-|Require ``-f``. Invert permutation (retrieve original matrix)
 -s|--subsample-size|int|Number of rows to use for distance computation {20000}
 -t|--to-order|str|Write out permutation file to path
+&nbsp;|--threshold|float|Reorder only if permutation would improve compression more than given percent. Uses a precomputed linear regression to predict reordering improvement.
