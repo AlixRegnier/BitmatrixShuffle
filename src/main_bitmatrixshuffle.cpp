@@ -241,12 +241,12 @@ int main(int argc, char ** argv)
 
         metrics["3_time_permutation(s)"] = GET_TIMER;
 
-        double metric_threshold = threshold * 2.961897441 + 0.816400508;
+        double predicted_metric = bms::predict_metric_from_threshold(threshold);
         
         //If default threshold and reordering would decrease compressibility, override linear regression and don't reorder
-        if(user_threshold && metric < metric_threshold)
+        if(user_threshold && metric < predicted_metric)
         {
-            metrics["2b_metric_interpolated_threshold"] = metric_threshold;
+            metrics["2b_metric_interpolated_threshold"] = predicted_metric;
             metrics["2b_metric_user_threshold"] = threshold;
 
             no_reorder = true;
