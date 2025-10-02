@@ -10,7 +10,7 @@ nlohmann::json metrics;
 
 void usage()
 {
-    std::cout << "Usage: bitmatrixshuffle -i <path> -c <columns> [-b <blocksize>] [--compress-to <path> [-p <level>]] [-f <path> [-r]] [-g <groupsize>] [--header <headersize>] [-j <path>] [-n] [-s <subsamplesize>] [-t <path>]\n\n-b, --block-size\t<int>\tTargeted block size in bytes {8388608}.\n-c, --columns\t\t<int>\tNumber of columns.\n--compress-to\t\t<str>\tWrite out permuted and compressed matrix to path.\n-f, --from-order\t<str>\tLoad permutation file from path.\n-g, --group-size\t<int>\tPartition column reordering into groups of given size {%columns%}.\n--header\t\t<int>\tInput matrix header size {0}.\n-h, --help\t\t\tPrint help.\n-i, --input\t\t<str>\tInput matrix file path.\n-n, --no-reorder\t\tIgnore reordering flags, program will do nothing if '-z' is not used.\n-p, --preset\t\t<int>\tRequire '--compress-to'. Zstd preset level [1-22] {3}.\n-r, --reverse\t\t\tRequire '-f'. Invert permutation (retrieve original matrix).\n-s, --subsample-size\t<int>\tNumber of rows to use for distance computation {20000}.\n-t, --to-order\t\t<str>\tWrite out permutation file to path.\n\n";
+    std::cout << "Usage: bitmatrixshuffle -i <path> -c <columns> [-b <blocksize>] [--compress-to <path> [-p <level>]] [-f <path> [-r]] [-g <groupsize>] [--header <headersize>] [-j <path>] [-n] [-s <subsamplesize>] [--threshold] [-t <path>]\n\n-b, --block-size\t<int>\tTargeted block size in bytes {8388608}.\n-c, --columns\t\t<int>\tNumber of columns.\n--compress-to\t\t<str>\tWrite out permuted and compressed matrix to path.\n-f, --from-order\t<str>\tLoad permutation file from path.\n-g, --group-size\t<int>\tPartition column reordering into groups of given size {%columns%}.\n--header\t\t<int>\tInput matrix header size {0}.\n-h, --help\t\t\tPrint help.\n-i, --input\t\t<str>\tInput matrix file path.\n-n, --no-reorder\t\tIgnore reordering flags, program will do nothing if '-z' is not used.\n-p, --preset\t\t<int>\tRequire '--compress-to'. Zstd preset level [1-22] {3}.\n-r, --reverse\t\t\tRequire '-f'. Invert permutation (retrieve original matrix).\n-s, --subsample-size\t<int>\tNumber of rows to use for distance computation {20000}.\n--threshold\t\t<int>\tReorder only if permutation would improve compression more than given percent (%).\n-t, --to-order\t\t<str>\tWrite out permutation file to path.\n\n";
 }
 
 int main(int argc, char ** argv)
@@ -24,6 +24,7 @@ int main(int argc, char ** argv)
     
     unsigned header = 0;
     unsigned preset_level = 3;
+    double threshold = 0.0;
     std::size_t groupsize = 0;
     std::size_t subsampled_rows = 20000;
     std::size_t columns;
@@ -34,6 +35,7 @@ int main(int argc, char ** argv)
     bool serialize_order = false;
     bool deserialize_order = false;
     bool no_reorder = false;
+    bool user_threshold = false;
     bool print_json = true;
 
     try 
@@ -54,6 +56,7 @@ int main(int argc, char ** argv)
             ("p,preset", "Require '--compress-to'. Compression preset level [1-22] {3}.", cxxopts::value<unsigned>())
             ("r,reverse", "Require '-f'. Invert permutation (retrieve original matrix).")
             ("s,subsample-size", "Number of rows to use for distance computation {20000}.", cxxopts::value<std::size_t>())
+            ("threshold", "Reorder only if permutation would improve compression more than given percent (%).", cxxopts::value<short>());
             ("t,to-order", "Write out permutation file to path.", cxxopts::value<std::string>());
 
         auto args = options.parse(argc, argv);
@@ -121,9 +124,6 @@ int main(int argc, char ** argv)
             }
         }
 
-        if(args.count("no-reorder"))
-            no_reorder = true;
-
         if(args.count("reverse"))
             if(args.count("from-order"))
                 reverse = true;
@@ -160,6 +160,19 @@ int main(int argc, char ** argv)
             print_json = false;
         }
 
+        if(args.count("no-reorder"))
+        {
+            no_reorder = true;
+            deserialize_order = false;
+            serialize_order = false;
+            reverse = false;
+        }
+
+        if(args.count("threshold"))
+        {
+            user_threshold = true;
+            threshold = args["threshold"].as<short>() / 100.0;
+        }
     } 
     catch (const cxxopts::exceptions::exception& e)
     {
@@ -186,7 +199,7 @@ int main(int argc, char ** argv)
     close(fd);
 
     
-    
+    std::vector<std::size_t> order;
     
     const std::size_t ROW_LENGTH = (columns + 7) / 8;
     const std::size_t NB_ROWS = (FILE_SIZE - header) / ROW_LENGTH;
@@ -205,98 +218,104 @@ int main(int argc, char ** argv)
     const std::size_t BLOCK_SIZE = bms::target_block_size(columns, target_block_size);
     const std::size_t BLOCK_NB_ROWS = bms::target_block_nb_rows(columns, target_block_size);
 
-
-    if(no_reorder)
+    //Compute order (or deserialize if given)
+    if(deserialize_order)
     {
-        if(compress)
-        {
-            std::string config_path = "config.cfg";
-            {
-                std::ofstream config_file(config_path, std::ios::out);
-                config_file << "samples = " << columns << "\n";
-                config_file << "bitvectorsperblock = " << BLOCK_NB_ROWS << "\n";
-                config_file << "preset = " << preset_level << std::endl;
-            }
+        order.resize(ROW_LENGTH*8);
+        fd = open(in_order_path.c_str(), O_RDONLY);
 
+        if(fd < 0)
+        {
+            std::cerr << "Error: Couldn't deserialize order, open syscall failed\n";
+            return 2;
+        }
+
+        read(fd, reinterpret_cast<char*>(order.data()), order.size()*sizeof(std::uint64_t));
+        close(fd);
+    }
+    else if(!no_reorder) //If reorder enabled and no order was given, compute it
+    {
+        START_TIMER;
+        double metric = bms::compute_order_from_matrix_columns(input_path, header, columns, NB_ROWS, groupsize, subsampled_rows, order);
+        END_TIMER;
+
+        metrics["3_time_permutation(s)"] = GET_TIMER;
+
+        double metric_threshold = threshold * 2.961897441 + 0.816400508;
+        
+        //If default threshold and reordering would decrease compressibility, override linear regression and don't reorder
+        if(user_threshold && metric < metric_threshold)
+        {
+            metrics["2b_metric_interpolated_threshold"] = metric_threshold;
+            metrics["2b_metric_user_threshold"] = threshold;
+
+            no_reorder = true;
+            reverse = false;
+            serialize_order = false;
+            deserialize_order = false;
+        }
+    }
+
+    //Compute reversed order
+    if(reverse)
+    {
+        std::vector<std::uint64_t> order_tmp(order);
+        bms::reverse_order(order_tmp, order);
+    }
+
+    if(compress)
+    {
+        metrics["1_blocksize(bytes)"] = BLOCK_SIZE;
+        metrics["1_rows_per_block"] = BLOCK_NB_ROWS;
+        metrics["1_target_blocksize(bytes)"] = target_block_size;
+
+        std::string config_path = "config.cfg";
+        {
+            std::ofstream config_file(config_path, std::ios::out);
+            config_file << "samples = " << columns << "\n";
+            config_file << "bitvectorsperblock = " << BLOCK_NB_ROWS << "\n";
+            config_file << "preset = " << preset_level << std::endl;
+        }
+
+        if(no_reorder)
+        {
+            //Compress matrix
             START_TIMER;
             BlockCompressorZSTD(output_path, output_ef_path, config_path).compress_file(input_path, header);
             END_TIMER;
 
             metrics["3_time_compression(s)"] = GET_TIMER;
         }
+        else 
+        {
+            //Reorder and compress matrix
+            bms::reorder_matrix_columns_and_compress(input_path, output_path, output_ef_path, config_path, header, columns, NB_ROWS, order, target_block_size);
+        }
     }
-    else
+    else if(!no_reorder)
     {
-        std::vector<std::uint64_t> order;
+        //Reorder matrix
+        START_TIMER;
+        bms::reorder_matrix_columns(input_path, header, columns, NB_ROWS, order, target_block_size); 
+        END_TIMER;
 
-        //Compute order (or deserialize if given)
-        if(deserialize_order)
+        metrics["3_time_reorder(s)"] = GET_TIMER;
+    }
+
+            
+    //Serialize order
+    if(serialize_order)
+    {
+        fd = open(out_order_path.c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0644);
+
+        if(fd < 0)
         {
-            order.resize(ROW_LENGTH*8);
-            fd = open(in_order_path.c_str(), O_RDONLY);
-
-            if(fd < 0)
-            {
-                std::cerr << "Error: Couldn't deserialize order, open syscall failed\n";
-                return 2;
-            }
-
-            read(fd, reinterpret_cast<char*>(order.data()), order.size()*sizeof(std::uint64_t));
-            close(fd);
-        }
-        else
-        {
-            bms::compute_order_from_matrix_columns(input_path, header, columns, NB_ROWS, groupsize, subsampled_rows, order);
+            std::cerr << "Error: Couldn't serialize order, open syscall failed\n";
+            return 2;
         }
 
-        //Compute reversed order
-        if(reverse)
-        {
-            std::vector<std::uint64_t> order_tmp(order);
-            bms::reverse_order(order_tmp, order);
-        }
-
-        if(compress)
-        {
-            metrics["1_blocksize(bytes)"] = BLOCK_SIZE;
-            metrics["1_rows_per_block"] = BLOCK_NB_ROWS;
-            metrics["1_target_blocksize(bytes)"] = target_block_size;
-
-            std::string config_path = "config.cfg";
-            {
-                std::ofstream config_file(config_path, std::ios::out);
-                config_file << "samples = " << columns << "\n";
-                config_file << "bitvectorsperblock = " << BLOCK_NB_ROWS << "\n";
-                config_file << "preset = " << preset_level << std::endl;
-            }
-
-            //Reorder and compression matrix
-            bms::reorder_matrix_columns_and_compress(input_path, output_path, output_ef_path, "config.cfg", header, columns, NB_ROWS, order, target_block_size);
-        }
-        else
-        {
-            //Reorder matrix
-            START_TIMER;
-            bms::reorder_matrix_columns(input_path, header, columns, NB_ROWS, order, target_block_size); 
-            END_TIMER;
-            metrics["3_time_reorder(s)"] = GET_TIMER;
-        }
-
-                
-        //Serialize order
-        if(serialize_order)
-        {
-            fd = open(out_order_path.c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0644);
-
-            if(fd < 0)
-            {
-                std::cerr << "Error: Couldn't serialize order, open syscall failed\n";
-                return 2;
-            }
-
-            write(fd, reinterpret_cast<char*>(order.data()), order.size()*sizeof(std::uint64_t));
-            close(fd);
-        }
+        write(fd, reinterpret_cast<char*>(order.data()), order.size()*sizeof(std::uint64_t));
+        close(fd);
     }
 
     //Handle JSON output
