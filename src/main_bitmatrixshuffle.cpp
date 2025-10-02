@@ -219,7 +219,12 @@ int main(int argc, char ** argv)
             config_file << "preset = " << preset_level << std::endl;
         }
 
+        START_TIMER;
         BlockCompressorZSTD(output_path, output_ef_path, config_path).compress_file(input_path, header);
+        END_TIMER;
+
+        metrics["3_time_compression(s)"] = GET_TIMER;
+
         return 0;
     }
 
