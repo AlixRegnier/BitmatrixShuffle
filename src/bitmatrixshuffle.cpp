@@ -1,5 +1,4 @@
 #include <bitmatrixshuffle.h>
-#include <zstd/BlockCompressorZSTD.h>
 
 //AVX2/SSE2
 #include <immintrin.h>

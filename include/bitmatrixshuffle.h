@@ -15,6 +15,7 @@
 
 #include <utils.h>
 #include <tsp.h>
+#include <zstd/BlockCompressorZSTD.h>
 
 namespace bms
 {
