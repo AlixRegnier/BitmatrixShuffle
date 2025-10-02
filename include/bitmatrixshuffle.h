@@ -17,10 +17,28 @@
 #include <tsp.h>
 #include <zstd/BlockCompressorZSTD.h>
 
+
+//Global JSON object for storing metrics
+#include <nlohmann/json.hpp>
+extern nlohmann::json metrics;
+
+#include <chrono>
+#define DECLARE_TIMER std::chrono::time_point<std::chrono::high_resolution_clock> __start_timer, __stop_timer; std::size_t __integral_time
+
+#define START_TIMER __start_timer = std::chrono::high_resolution_clock::now(); \
+                    std::cout << std::flush
+
+#define END_TIMER __stop_timer = std::chrono::high_resolution_clock::now(); \
+                  __integral_time = static_cast<std::size_t>(std::chrono::duration_cast<std::chrono::milliseconds>(__stop_timer - __start_timer).count())
+
+                  
+#define GET_TIMER (__integral_time / 1000.0)
+#define SHOW_TIMER std::cout << std::setprecision(3) << GET_TIMER << "s" << std::endl
+
 namespace bms
 {
     std::size_t target_block_nb_rows(const std::size_t NB_COLS, const std::size_t BLOCK_TARGET_SIZE);
-
+    
     std::size_t target_block_size(const std::size_t NB_COLS, const std::size_t BLOCK_TARGET_SIZE);
 
     //Start multiple path TSP instances to be solved using Nearest-Neighbor, need 

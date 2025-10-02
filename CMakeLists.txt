@@ -44,12 +44,12 @@ target_sources(bitmatrixshuffle PRIVATE
     ${BMS_SRC_DIR}/tsp.cpp
 )
 
-target_link_libraries(bitmatrixshuffle PRIVATE bms_build_type_flags sdsl-lite zstd_ext block_compressor_ext)
+target_link_libraries(bitmatrixshuffle PRIVATE bms_build_type_flags sdsl-lite zstd_ext json_ext block_compressor_ext)
 target_include_directories(bitmatrixshuffle PUBLIC
     $<BUILD_INTERFACE:${BMS_INCLUDE_DIR}>
     $<INSTALL_INTERFACE:include>
 )
-add_dependencies(bitmatrixshuffle block_compressor_ext)
+add_dependencies(bitmatrixshuffle block_compressor_ext json_ext)
 
 if(BMS_BUILD_MAIN)
     add_executable(main_bitmatrixshuffle
@@ -60,6 +60,6 @@ if(BMS_BUILD_MAIN)
         $<BUILD_INTERFACE:${BMS_INCLUDE_DIR}>
         $<INSTALL_INTERFACE:include>
     )
-    target_link_libraries(main_bitmatrixshuffle PRIVATE cxxopts_ext zstd_ext sdsl-lite block_compressor_ext bitmatrixshuffle)
-    add_dependencies(main_bitmatrixshuffle bitmatrixshuffle block_compressor_ext cxxopts_ext)
+    target_link_libraries(main_bitmatrixshuffle PRIVATE cxxopts_ext json_ext zstd_ext sdsl-lite block_compressor_ext bitmatrixshuffle)
+    add_dependencies(main_bitmatrixshuffle bitmatrixshuffle block_compressor_ext cxxopts_ext json_ext )
 endif()

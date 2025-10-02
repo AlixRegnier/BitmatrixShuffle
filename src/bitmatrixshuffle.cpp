@@ -133,8 +133,22 @@ namespace bms
         return ROW_LENGTH * target_block_nb_rows(NB_COLS, BLOCK_TARGET_SIZE); 
     }
 
+    std::size_t estimate_computations(std::size_t n1, std::size_t n2, std::size_t x1)
+    {
+        #define OMEGA(n) ((n)*std::log2((n)))
+        #define BIGO(n)  (((n)*((n)-1))/2.0)
+
+        return (std::size_t)(OMEGA(n2) + (BIGO(n2)-OMEGA(n2))/(BIGO(n1)-OMEGA(n1)) * (x1-OMEGA(n1)));
+
+        #undef OMEGA
+        #undef BIGO
+    }
+  
     double compute_order_from_matrix_columns(const std::string& MATRIX_PATH, const unsigned HEADER, const std::size_t NB_COLS, const std::size_t NB_ROWS, std::size_t groupsize, std::size_t subsampled_rows, std::vector<std::uint64_t>& order)
     {
+        DECLARE_TIMER;
+        START_TIMER;
+
         int fd = open(MATRIX_PATH.c_str(), O_RDONLY); 
         if(fd < 0)
             throw std::runtime_error("BMS-ERROR: Failed to open a file descriptor on reference matrix");
@@ -216,6 +230,7 @@ namespace bms
         distanceMatrix.resize(last_group_size);
         computed_distances += build_double_ended_NN(transposed_matrix, distanceMatrix, subsampled_rows, offset, order);
 
+
         for(std::size_t j = offset; j + 1 < offset+last_group_size; ++j)
         {
             if(distanceMatrix.get(j, j+1) == BMS_NULL_DISTANCE)
@@ -237,7 +252,68 @@ namespace bms
                 new_consecutive_distances_sum += distanceMatrix.get(order[j], order[j+1]);
         }
 
+
+        END_TIMER;
+        metrics["3_time_permutation(s)"] = GET_TIMER; 
         
+        std::size_t max_computable_distances = (groupsize * (groupsize - 1) / 2) * (NB_GROUPS - 1) + last_group_size * (last_group_size - 1) / 2;
+        metrics["2a_computed_distances"] = computed_distances;
+        metrics["2a_max_computable_distances"] = max_computable_distances;
+        metrics["2a_pct_computed_distances(%)"] = 100.0 * computed_distances / max_computable_distances;
+
+        //Try distance estimation to further extract error bounds
+        #define FAKE_SIZE 4096
+        if(ROW_LENGTH*8 > FAKE_SIZE)
+        {
+            DistanceMatrix fake_distanceMatrix(FAKE_SIZE);
+            std::vector<std::uint64_t> fake_order;
+            fake_order.resize(FAKE_SIZE);
+            std::size_t fake_computed_distances = build_double_ended_NN(transposed_matrix, fake_distanceMatrix, subsampled_rows, 0, fake_order);
+            std::size_t fake_max_computable_distances = (FAKE_SIZE * (FAKE_SIZE - 1)) / 2.0;
+            metrics["2c_fake_computed_distances"] = fake_computed_distances;
+            metrics["2c_fake_max_computable_distances"] = fake_max_computable_distances;
+            metrics["2c_fake_pct_computed_distances(%)"] = 100.0 * fake_computed_distances / fake_max_computable_distances;
+            
+            std::size_t estimated_computed_distances = estimate_computations(FAKE_SIZE, groupsize, fake_computed_distances) * NB_GROUPS + estimate_computations(FAKE_SIZE, last_group_size, fake_computed_distances);
+            metrics["2c_estimated_computed_distances"] = estimated_computed_distances;
+
+            metrics["2c_estimation_error(%)"] = 100.0 * (std::max(estimated_computed_distances, computed_distances) - std::min(estimated_computed_distances, computed_distances)) / estimated_computed_distances;
+        }
+        #undef FAKE_SIZE
+
+        double original_consecutive_distances_sum = 0.0;
+        double new_consecutive_distances_sum = 0.0;
+
+
+        double original_consecutive_distances_average = original_consecutive_distances_sum / (ROW_LENGTH*8 - 1);
+        double new_consecutive_distances_average = new_consecutive_distances_sum / (ROW_LENGTH*8 - 1);
+
+        double original_consecutive_distances_variance = 0.0;
+        double new_consecutive_distances_variance = 0.0;
+
+        //Compute variance
+        for(unsigned i = 0; i + 1 < ROW_LENGTH*8; ++i)
+        {
+            original_consecutive_distances_variance += std::pow(columns_hamming_distance(transposed_matrix, subsampled_rows, i, i+1) - original_consecutive_distances_average, 2);
+            new_consecutive_distances_variance += std::pow(columns_hamming_distance(transposed_matrix, subsampled_rows, order[i], order[i+1]) - new_consecutive_distances_average, 2);
+        }
+
+        //N-1: fix population bias
+        original_consecutive_distances_variance /= ROW_LENGTH*8 - 2;
+        new_consecutive_distances_variance /= ROW_LENGTH*8 - 2;
+
+        //Compute stdev from variance
+        double original_consecutive_distances_stdev = std::sqrt(original_consecutive_distances_variance);
+        double new_consecutive_distances_stdev = std::sqrt(new_consecutive_distances_variance);
+
+        metrics["2b_consecutive_column_distance_avg_original"] = original_consecutive_distances_average;
+        metrics["2b_consecutive_column_distance_avg_reorder"] = new_consecutive_distances_average;
+        metrics["2b_consecutive_column_distance_var_original"] = original_consecutive_distances_variance;
+        metrics["2b_consecutive_column_distance_var_reorder"] = new_consecutive_distances_variance;
+        metrics["2b_consecutive_column_distance_stdev_original"] = original_consecutive_distances_stdev;
+        metrics["2b_consecutive_column_distance_stdev_reorder"] = new_consecutive_distances_stdev;
+        metrics["2b_metric_reordering_compressibility_factor"] = 1.0 * original_consecutive_distances_average / new_consecutive_distances_average;
+      
         BMS_DELETE_MATRIX(transposed_matrix);
 
         return original_consecutive_distances_sum / new_consecutive_distances_sum;
@@ -309,8 +385,15 @@ namespace bms
         close(fd);
     }
 
+    void __count_bytes(const std::uint8_t * bytes, const std::size_t length, std::size_t * counts)
+    {
+        for(std::size_t i = 0; i < length; ++counts[bytes[i++]]);
+    }
+
     void reorder_matrix_columns_and_compress(const std::string& MATRIX_PATH, const std::string& OUTPUT_PATH, const std::string& OUTPUT_EF_PATH, const std::string& CONFIG_PATH, const unsigned HEADER, const std::size_t NB_COLS, const std::size_t NB_ROWS, const std::vector<std::uint64_t>& ORDER, std::size_t BLOCK_TARGET_SIZE)
     {
+        DECLARE_TIMER;
+
         //Get row length in bytes
         const std::size_t ROW_LENGTH = (NB_COLS + 7) / 8;
 
@@ -322,6 +405,8 @@ namespace bms
 
         //The last block may not be full
         const std::size_t NB_BLOCKS = (NB_ROWS+BLOCK_NB_ROWS-1) / BLOCK_NB_ROWS; 
+
+        metrics["1_nb_blocks"] = NB_BLOCKS;
         
         const std::size_t FILE_SIZE = HEADER + NB_ROWS * ROW_LENGTH;
         
@@ -344,38 +429,78 @@ namespace bms
         //Tell system that data will be accessed sequentially
         posix_madvise(mapped_file, FILE_SIZE, POSIX_MADV_SEQUENTIAL);
 
+        std::size_t time_compression = 0;
+        std::size_t time_reorder = 0;
+
+        START_TIMER;
         BlockCompressorZSTD block_compressor(OUTPUT_PATH, OUTPUT_EF_PATH, CONFIG_PATH);
         block_compressor.write_header(mapped_file, HEADER);
+        END_TIMER;
+        time_compression += __integral_time;
+
+        std::vector<std::size_t> count_bytes_original;
+        std::vector<std::size_t> count_bytes_reordered;
+        count_bytes_original.resize(256);
+        count_bytes_reordered.resize(256);
 
         std::size_t i = 0;
         //Process each blocks except the last
         for(; i + 1 < NB_BLOCKS; ++i)
         {
+            //METRIC :: COUNT_BYTES
+            __count_bytes(reinterpret_cast<std::uint8_t*>(GET_BLOCK_PTR(i)), BLOCK_SIZE, count_bytes_original.data());
+
+            START_TIMER;
             //Copy block from disk to memory
             std::memcpy(buffered_block, GET_BLOCK_PTR(i), BLOCK_SIZE);
 
             //Transpose matrix block
             __sse2_trans(reinterpret_cast<const std::uint8_t*>(buffered_block), reinterpret_cast<std::uint8_t*>(transposed_block), BLOCK_NB_ROWS, ROW_LENGTH*8);
-
+            
             //Reorder block columns (by reordering transposed block rows)
             reorder_matrix_rows(transposed_block, 0, BLOCK_NB_ROWS/8, ORDER);
-
+            
             //Transpose matrix block back
             __sse2_trans(reinterpret_cast<const std::uint8_t*>(transposed_block), reinterpret_cast<std::uint8_t*>(buffered_block), ROW_LENGTH*8, BLOCK_NB_ROWS);
+            END_TIMER;
+            time_reorder += __integral_time;
+
+            //METRIC :: COUNT_BYTES (reordered)
+            __count_bytes(reinterpret_cast<std::uint8_t*>(buffered_block), BLOCK_SIZE, count_bytes_reordered.data());
 
             //Bring buffered block to compressor
+            START_TIMER;
             block_compressor.append_block(reinterpret_cast<std::uint8_t*>(buffered_block), BLOCK_SIZE);
+            END_TIMER;
+            time_compression += __integral_time;
         }
 
-        //Handle last block that may be smaller, only compression step differs from loop
+        __count_bytes(reinterpret_cast<std::uint8_t*>(GET_BLOCK_PTR(i)), last_block_size, count_bytes_original.data());
+        //Handle last block that may be smaller, only block effective size differs
+        START_TIMER;
         std::memcpy(buffered_block, GET_BLOCK_PTR(i), last_block_size);
         __sse2_trans(reinterpret_cast<const std::uint8_t*>(buffered_block), reinterpret_cast<std::uint8_t*>(transposed_block), BLOCK_NB_ROWS, ROW_LENGTH*8);
         reorder_matrix_rows(transposed_block, 0, BLOCK_NB_ROWS/8, ORDER);
         __sse2_trans(reinterpret_cast<const std::uint8_t*>(transposed_block), reinterpret_cast<std::uint8_t*>(buffered_block), ROW_LENGTH*8, BLOCK_NB_ROWS);
+        END_TIMER;
+        time_reorder += __integral_time;
+
+        __count_bytes(reinterpret_cast<std::uint8_t*>(buffered_block), last_block_size, count_bytes_reordered.data());
+
+        START_TIMER;
         block_compressor.append_block(reinterpret_cast<std::uint8_t*>(buffered_block), last_block_size);
 
         //Close
         block_compressor.close();
+        END_TIMER;
+        time_compression += __integral_time;
+
+        metrics["3_time_compression(s)"] = time_compression / 1000.0;
+        metrics["3_time_reorder(s)"] = time_reorder / 1000.0;
+        
+        metrics["4_histogram_original"] = count_bytes_original;
+        metrics["4_histogram_reordered"] = count_bytes_reordered;
+
         BMS_DELETE_MATRIX(buffered_block);
         BMS_DELETE_MATRIX(transposed_block);
 
