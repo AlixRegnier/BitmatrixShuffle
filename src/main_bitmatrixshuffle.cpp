@@ -21,6 +21,7 @@ int main(int argc, char ** argv)
     
     unsigned header = 0;
     unsigned preset_level = 3;
+    double threshold = -1.0;
     std::size_t groupsize = 0;
     std::size_t subsampled_rows = 20000;
     std::size_t columns;
@@ -31,6 +32,7 @@ int main(int argc, char ** argv)
     bool serialize_order = false;
     bool deserialize_order = false;
     bool no_reorder = false;
+    bool user_threshold = false;
 
     try 
     {
@@ -49,6 +51,7 @@ int main(int argc, char ** argv)
             ("p,preset", "Require '--compress-to'. Compression preset level [1-22] {3}.", cxxopts::value<unsigned>())
             ("r,reverse", "Require '-f'. Invert permutation (retrieve original matrix).")
             ("s,subsample-size", "Number of rows to use for distance computation {20000}.", cxxopts::value<std::size_t>())
+            ("threshold", "Uses a precomputed linear regression to predict reordering improvement.", cxxopts::value<double>());
             ("t,to-order", "Write out permutation file to path.", cxxopts::value<std::string>());
 
         auto args = options.parse(argc, argv);
@@ -113,9 +116,6 @@ int main(int argc, char ** argv)
             }
         }
 
-        if(args.count("no-reorder"))
-            no_reorder = true;
-
         if(args.count("reverse"))
             if(args.count("from-order"))
                 reverse = true;
@@ -140,6 +140,19 @@ int main(int argc, char ** argv)
         if(args.count("block-size"))
             target_block_size = args["block-size"].as<std::size_t>();
 
+        if(args.count("no-reorder"))
+        {
+            no_reorder = true;
+            deserialize_order = false;
+            serialize_order = false;
+            reverse = false;
+        }
+
+        if(args.count("threshold"))
+        {
+            user_threshold = true;
+            threshold = args["threshold"].as<double>();
+        }
     } 
     catch (const cxxopts::exceptions::exception& e)
     {
@@ -166,30 +179,11 @@ int main(int argc, char ** argv)
     close(fd);
 
 
-
     const std::size_t ROW_LENGTH = (columns + 7) / 8;
     const std::size_t NB_ROWS = (FILE_SIZE - header) / ROW_LENGTH;
 
     //Compute block size according to the number of columns
     const std::size_t BLOCK_NB_ROWS = bms::target_block_nb_rows(columns, target_block_size);
-
-
-    if(no_reorder)
-    {
-        if(!compress)
-            return 0;
-
-        std::string config_path = "config.cfg";
-        {
-            std::ofstream config_file(config_path, std::ios::out);
-            config_file << "samples = " << columns << "\n";
-            config_file << "bitvectorsperblock = " << BLOCK_NB_ROWS << "\n";
-            config_file << "preset = " << preset_level << std::endl;
-        }
-
-        BlockCompressorZSTD(output_path, output_ef_path, config_path).compress_file(input_path, header);
-        return 0;
-    }
 
     std::vector<std::uint64_t> order;
 
@@ -208,9 +202,19 @@ int main(int argc, char ** argv)
         read(fd, reinterpret_cast<char*>(order.data()), order.size()*sizeof(std::uint64_t));
         close(fd);
     }
-    else
+    else if(!no_reorder) //If reorder enabled and no order was given, compute it
     {
-        bms::compute_order_from_matrix_columns(input_path, header, columns, NB_ROWS, groupsize, subsampled_rows, order);
+        double metric = bms::compute_order_from_matrix_columns(input_path, header, columns, NB_ROWS, groupsize, subsampled_rows, order);
+        double metric_threshold = threshold * 2.961897441 + 0.816400508;
+
+        //If default threshold and reordering would decrease compressibility, override linear regression and don't reorder
+        if(user_threshold && metric < metric_threshold)
+        {
+            no_reorder = true;
+            reverse = false;
+            serialize_order = false;
+            deserialize_order = false;
+        }
     }
 
     //Compute reversed order
@@ -230,10 +234,18 @@ int main(int argc, char ** argv)
             config_file << "preset = " << preset_level << std::endl;
         }
 
-        //Reorder and compression matrix
-        bms::reorder_matrix_columns_and_compress(input_path, output_path, output_ef_path, "config.cfg", header, columns, NB_ROWS, order, target_block_size);
+        if(no_reorder)
+        {
+            //Compress matrix
+            BlockCompressorZSTD(output_path, output_ef_path, config_path).compress_file(input_path, header);
+        }
+        else 
+        {
+            //Reorder and compress matrix
+            bms::reorder_matrix_columns_and_compress(input_path, output_path, output_ef_path, config_path, header, columns, NB_ROWS, order, target_block_size);
+        }
     }
-    else
+    else if(!no_reorder)
     {
         //Reorder matrix
         bms::reorder_matrix_columns(input_path, header, columns, NB_ROWS, order, target_block_size); 
