@@ -31,16 +31,19 @@ There is a binary that is compiled by default when using build script. It allows
 ./main_bitmatrixshuffle -i <path> -c <columns> [-b <blocksize>] [--compress-to <path>] [-f <path> [-r]] [-g <groupsize>] [--header <headersize>] [-s <subsamplesize>] [-t <path>]
 ```
 
+
 ### Arguments
 Shortname|Longname|Arg|Description
 --|--|--|--
 -b|--block-size|int|Targeted block size in bytes {8388608}
--c|--columns|int|Number of columns.
-&nbsp;|--compress-to|str|Write out permuted and compressed matrix to path
+-c|--columns|int|Number of columns
+-z|--compress-to|str|Write out permuted and compressed matrix to path
 -f|--from-order|str|Load permutation file from path
 -g|--group-size|int|Partition column reordering into groups of given size {0}
 &nbsp;|--header|int|Input matrix header size {0}
 -h|--help|-|Print help
+-n|--no-reorder|-|Ignore reordering flags, program will do nothing if ``-z`` is not used
+-p|--preset|int|Require ``--compress-to``. Compression preset level [1-22] {3}
 -i|--input|str|Input matrix file path.
 -r|--reverse|-|Require ``-f``. Invert permutation (retrieve original matrix)
 -s|--subsample-size|int|Number of rows to use for distance computation {20000}
