@@ -46,4 +46,5 @@ Shortname|Longname|Arg|Description
 -i|--input|str|Input matrix file path.
 -r|--reverse|-|Require ``-f``. Invert permutation (retrieve original matrix)
 -s|--subsample-size|int|Number of rows to use for distance computation {20000}
+&nbsp;|--threshold|int|Reorder only if permutation would improve compression more than given percent (%)
 -t|--to-order|str|Write out permutation file to path
