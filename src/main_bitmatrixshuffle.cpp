@@ -202,6 +202,7 @@ int main(int argc, char ** argv)
     DECLARE_TIMER;
 
     //Compute block size according to the number of columns
+    const std::size_t BLOCK_SIZE = bms::target_block_size(columns, target_block_size);
     const std::size_t BLOCK_NB_ROWS = bms::target_block_nb_rows(columns, target_block_size);
 
 

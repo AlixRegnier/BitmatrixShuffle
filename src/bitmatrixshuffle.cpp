@@ -281,10 +281,6 @@ namespace bms
         }
         #undef FAKE_SIZE
 
-        double original_consecutive_distances_sum = 0.0;
-        double new_consecutive_distances_sum = 0.0;
-
-
         double original_consecutive_distances_average = original_consecutive_distances_sum / (ROW_LENGTH*8 - 1);
         double new_consecutive_distances_average = new_consecutive_distances_sum / (ROW_LENGTH*8 - 1);
 
