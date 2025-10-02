@@ -208,97 +208,98 @@ int main(int argc, char ** argv)
 
     if(no_reorder)
     {
-        if(!compress)
-            return 0;
-
-        std::string config_path = "config.cfg";
+        if(compress)
         {
-            std::ofstream config_file(config_path, std::ios::out);
-            config_file << "samples = " << columns << "\n";
-            config_file << "bitvectorsperblock = " << BLOCK_NB_ROWS << "\n";
-            config_file << "preset = " << preset_level << std::endl;
+            std::string config_path = "config.cfg";
+            {
+                std::ofstream config_file(config_path, std::ios::out);
+                config_file << "samples = " << columns << "\n";
+                config_file << "bitvectorsperblock = " << BLOCK_NB_ROWS << "\n";
+                config_file << "preset = " << preset_level << std::endl;
+            }
+
+            START_TIMER;
+            BlockCompressorZSTD(output_path, output_ef_path, config_path).compress_file(input_path, header);
+            END_TIMER;
+
+            metrics["3_time_compression(s)"] = GET_TIMER;
         }
-
-        START_TIMER;
-        BlockCompressorZSTD(output_path, output_ef_path, config_path).compress_file(input_path, header);
-        END_TIMER;
-
-        metrics["3_time_compression(s)"] = GET_TIMER;
-
-        return 0;
-    }
-
-    std::vector<std::uint64_t> order;
-
-    //Compute order (or deserialize if given)
-    if(deserialize_order)
-    {
-        order.resize(ROW_LENGTH*8);
-        fd = open(in_order_path.c_str(), O_RDONLY);
-
-        if(fd < 0)
-        {
-            std::cerr << "Error: Couldn't deserialize order, open syscall failed\n";
-            return 2;
-        }
-
-        read(fd, reinterpret_cast<char*>(order.data()), order.size()*sizeof(std::uint64_t));
-        close(fd);
     }
     else
     {
-        bms::compute_order_from_matrix_columns(input_path, header, columns, NB_ROWS, groupsize, subsampled_rows, order);
-    }
+        std::vector<std::uint64_t> order;
 
-    //Compute reversed order
-    if(reverse)
-    {
-        std::vector<std::uint64_t> order_tmp(order);
-        bms::reverse_order(order_tmp, order);
-    }
-
-    if(compress)
-    {
-        metrics["1_blocksize(bytes)"] = BLOCK_SIZE;
-        metrics["1_rows_per_block"] = BLOCK_NB_ROWS;
-        metrics["1_target_blocksize(bytes)"] = target_block_size;
-
-        std::string config_path = "config.cfg";
+        //Compute order (or deserialize if given)
+        if(deserialize_order)
         {
-            std::ofstream config_file(config_path, std::ios::out);
-            config_file << "samples = " << columns << "\n";
-            config_file << "bitvectorsperblock = " << BLOCK_NB_ROWS << "\n";
-            config_file << "preset = " << preset_level << std::endl;
+            order.resize(ROW_LENGTH*8);
+            fd = open(in_order_path.c_str(), O_RDONLY);
+
+            if(fd < 0)
+            {
+                std::cerr << "Error: Couldn't deserialize order, open syscall failed\n";
+                return 2;
+            }
+
+            read(fd, reinterpret_cast<char*>(order.data()), order.size()*sizeof(std::uint64_t));
+            close(fd);
+        }
+        else
+        {
+            bms::compute_order_from_matrix_columns(input_path, header, columns, NB_ROWS, groupsize, subsampled_rows, order);
         }
 
-        //Reorder and compression matrix
-        bms::reorder_matrix_columns_and_compress(input_path, output_path, output_ef_path, "config.cfg", header, columns, NB_ROWS, order, target_block_size);
-    }
-    else
-    {
-        //Reorder matrix
-        START_TIMER;
-        bms::reorder_matrix_columns(input_path, header, columns, NB_ROWS, order, target_block_size); 
-        END_TIMER;
-        metrics["3_time_reorder(s)"] = GET_TIMER;
-    }
-
-            
-    //Serialize order
-    if(serialize_order)
-    {
-        fd = open(out_order_path.c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0644);
-
-        if(fd < 0)
+        //Compute reversed order
+        if(reverse)
         {
-            std::cerr << "Error: Couldn't serialize order, open syscall failed\n";
-            return 2;
+            std::vector<std::uint64_t> order_tmp(order);
+            bms::reverse_order(order_tmp, order);
         }
 
-        write(fd, reinterpret_cast<char*>(order.data()), order.size()*sizeof(std::uint64_t));
-        close(fd);
+        if(compress)
+        {
+            metrics["1_blocksize(bytes)"] = BLOCK_SIZE;
+            metrics["1_rows_per_block"] = BLOCK_NB_ROWS;
+            metrics["1_target_blocksize(bytes)"] = target_block_size;
+
+            std::string config_path = "config.cfg";
+            {
+                std::ofstream config_file(config_path, std::ios::out);
+                config_file << "samples = " << columns << "\n";
+                config_file << "bitvectorsperblock = " << BLOCK_NB_ROWS << "\n";
+                config_file << "preset = " << preset_level << std::endl;
+            }
+
+            //Reorder and compression matrix
+            bms::reorder_matrix_columns_and_compress(input_path, output_path, output_ef_path, "config.cfg", header, columns, NB_ROWS, order, target_block_size);
+        }
+        else
+        {
+            //Reorder matrix
+            START_TIMER;
+            bms::reorder_matrix_columns(input_path, header, columns, NB_ROWS, order, target_block_size); 
+            END_TIMER;
+            metrics["3_time_reorder(s)"] = GET_TIMER;
+        }
+
+                
+        //Serialize order
+        if(serialize_order)
+        {
+            fd = open(out_order_path.c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0644);
+
+            if(fd < 0)
+            {
+                std::cerr << "Error: Couldn't serialize order, open syscall failed\n";
+                return 2;
+            }
+
+            write(fd, reinterpret_cast<char*>(order.data()), order.size()*sizeof(std::uint64_t));
+            close(fd);
+        }
     }
 
+    //Handle JSON output
     if(print_json)
     {
         std::cout << std::setw(4) << metrics << std::endl;
