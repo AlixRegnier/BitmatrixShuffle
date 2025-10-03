@@ -1,6 +1,7 @@
 #include <bitmatrixshuffle.h>
 #include <cxxopts.hpp>
 #include <fstream>
+#include <filesystem>
 #include <unistd.h>
 #include <fcntl.h>
 #include <stdio.h>
@@ -10,7 +11,7 @@ nlohmann::json metrics;
 
 void usage()
 {
-    std::cout << "Usage: bitmatrixshuffle -i <path> -c <columns> [-b <blocksize>] [--compress-to <path> [-p <level>]] [-f <path> [-r]] [-g <groupsize>] [--header <headersize>] [-j <path>] [-n] [-s <subsamplesize>] [--threshold] [-t <path>]\n\n-b, --block-size\t<int>\tTargeted block size in bytes {8388608}.\n-c, --columns\t\t<int>\tNumber of columns.\n--compress-to\t\t<str>\tWrite out permuted and compressed matrix to path.\n-f, --from-order\t<str>\tLoad permutation file from path.\n-g, --group-size\t<int>\tPartition column reordering into groups of given size {%columns%}.\n--header\t\t<int>\tInput matrix header size {0}.\n-h, --help\t\t\tPrint help.\n-i, --input\t\t<str>\tInput matrix file path.\n-n, --no-reorder\t\tIgnore reordering flags, program will do nothing if '-z' is not used.\n-p, --preset\t\t<int>\tRequire '--compress-to'. Zstd preset level [1-22] {3}.\n-r, --reverse\t\t\tRequire '-f'. Invert permutation (retrieve original matrix).\n-s, --subsample-size\t<int>\tNumber of rows to use for distance computation {20000}.\n--threshold\t\t<int>\tReorder only if permutation would improve compression more than given percent (%).\n-t, --to-order\t\t<str>\tWrite out permutation file to path.\n\n";
+    std::cout << "Usage: bitmatrixshuffle -i <path> -c <columns> [-b <blocksize>] [--compress-to <path> [-p <level>]] [-f <path> [-r]] [-g <groupsize>] [--header <headersize>] [-j <path>] [-n] [-s <subsamplesize>] [--config-path <path>] [--threshold] [-t <path>]\n\n-b, --block-size\t<int>\tTargeted block size in bytes {8388608}.\n-c, --columns\t\t<int>\tNumber of columns.\n--compress-to\t\t<str>\tWrite out permuted and compressed matrix to path.\n-f, --from-order\t<str>\tLoad permutation file from path.\n-g, --group-size\t<int>\tPartition column reordering into groups of given size {%columns%}.\n--header\t\t<int>\tInput matrix header size {0}.\n-h, --help\t\t\tPrint help.\n-i, --input\t\t<str>\tInput matrix file path.\n-n, --no-reorder\t\tIgnore reordering flags, program will do nothing if '-z' is not used.\n-p, --preset\t\t<int>\tRequire '--compress-to'. Zstd preset level [1-22] {3}.\n-r, --reverse\t\t\tRequire '-f'. Invert permutation (retrieve original matrix).\n-s, --subsample-size\t<int>\tNumber of rows to use for distance computation {20000}.\n--threshold\t\t<int>\tReorder only if permutation would improve compression more than given percent (%).\n-t, --to-order\t\t<str>\tWrite out permutation file to path.\n\n";
 }
 
 int main(int argc, char ** argv)
@@ -20,6 +21,7 @@ int main(int argc, char ** argv)
     std::string output_ef_path;
     std::string in_order_path;
     std::string out_order_path;
+    std::string config_path;
     std::string json_path;
     
     unsigned header = 0;
@@ -58,6 +60,7 @@ int main(int argc, char ** argv)
             ("s,subsample-size", "Number of rows to use for distance computation {20000}.", cxxopts::value<std::size_t>())
             ("threshold", "Reorder only if permutation would improve compression more than given percent (%).", cxxopts::value<short>());
             ("t,to-order", "Write out permutation file to path.", cxxopts::value<std::string>());
+            ("config-path", "Path to config file {config.cfg}.", cxxopts::value<std::string>());
 
         auto args = options.parse(argc, argv);
 
@@ -154,6 +157,11 @@ int main(int argc, char ** argv)
         if(args.count("block-size"))
             target_block_size = args["block-size"].as<std::size_t>();
 
+
+        config_path = "config.cfg";
+        if (args.count("config-path"))
+            config_path = args["config-path"].as<std::string>();
+
         if(args.count("json"))
         {
             json_path = args["json"].as<std::string>();
@@ -235,6 +243,12 @@ int main(int argc, char ** argv)
     }
     else if(!no_reorder) //If reorder enabled and no order was given, compute it
     {
+        if(subsampled_rows > NB_ROWS)
+        {
+            std::cout << "Warning: Subsampled rows (" << subsampled_rows << ") exceeds row count (" << NB_ROWS << "). Clamping to " << NB_ROWS << " rows." << std::endl;
+            subsampled_rows = NB_ROWS;
+        }
+        bms::compute_order_from_matrix_columns(input_path, header, columns, NB_ROWS, groupsize, subsampled_rows, order);
         START_TIMER;
         double metric = bms::compute_order_from_matrix_columns(input_path, header, columns, NB_ROWS, groupsize, subsampled_rows, order);
         END_TIMER;
@@ -269,7 +283,7 @@ int main(int argc, char ** argv)
         metrics["1_rows_per_block"] = BLOCK_NB_ROWS;
         metrics["1_target_blocksize(bytes)"] = target_block_size;
 
-        std::string config_path = "config.cfg";
+        if (!std::filesystem::exists(config_path))
         {
             std::ofstream config_file(config_path, std::ios::out);
             config_file << "samples = " << columns << "\n";
