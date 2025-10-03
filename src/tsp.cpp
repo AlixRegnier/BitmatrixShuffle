@@ -29,6 +29,7 @@ namespace bms
         for(std::size_t i = 0; i < vertices.size(); ++i)
             vertices[i] = i;
 
+        //Naive pairwise distance computation
         for(std::size_t i = 0; i < distanceMatrix.width(); ++i)
         {
             for(std::size_t j = i+1; j < distanceMatrix.width(); ++j)
@@ -36,6 +37,8 @@ namespace bms
                 distanceMatrix.set(i, j, columns_hamming_distance(MATRIX, SUBSAMPLED_ROWS, i+OFFSET, j+OFFSET));
             }
         }
+
+        distanceMatrix.write_as_phylip("distance_matrix." + std::to_string(OFFSET / distanceMatrix.width()) + ".phylip");
 
         //Find second vertex
         IndexDistance second = find_closest_vertex(distanceMatrix, firstVertex, alreadyAdded);

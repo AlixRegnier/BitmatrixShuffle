@@ -19,6 +19,7 @@ namespace bms
             double get(std::size_t x, std::size_t y) const;
             void set(std::size_t x, std::size_t y, double distance);
             void reset();
+            void write_as_phylip(const std::string& path, unsigned short max_decimals = 6) const;
         private:
             std::size_t index(std::size_t x, std::size_t y) const;
             std::vector<double> matrix;
