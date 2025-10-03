@@ -56,7 +56,7 @@ namespace bms
     {
         std::ofstream s(path, std::ios::out);
         s << std::setprecision(max_decimals);
-        s << COLUMNS << '\n';
+        s << width() << '\n';
 
         for(unsigned i = 0; i < width(); ++i)
         {
