@@ -196,6 +196,8 @@ namespace bms
 
         std::size_t computed_distances = 0;
 
+        metrics["3_time_distance_computation(s)"] = 0.0;
+        
         DistanceMatrix distanceMatrix(groupsize);
         for(std::size_t i = 0; i < NB_GROUPS-1; ++i)
         {

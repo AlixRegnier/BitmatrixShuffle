@@ -29,6 +29,8 @@ namespace bms
         for(std::size_t i = 0; i < vertices.size(); ++i)
             vertices[i] = i;
 
+        DECLARE_TIMER;
+        START_TIMER;
         //Naive pairwise distance computation
         for(std::size_t i = 0; i < distanceMatrix.width(); ++i)
         {
@@ -37,6 +39,8 @@ namespace bms
                 distanceMatrix.set(i, j, columns_hamming_distance(MATRIX, SUBSAMPLED_ROWS, i+OFFSET, j+OFFSET));
             }
         }
+        END_TIMER;
+        metrics["3_time_distance_computation(s)"] = ((double)metrics["3_time_distance_computation(s)"]) + GET_TIMER;
 
         distanceMatrix.write_as_phylip("distance_matrix." + std::to_string(OFFSET / distanceMatrix.width()) + ".phylip");
 

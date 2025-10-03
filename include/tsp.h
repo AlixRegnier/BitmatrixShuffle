@@ -4,7 +4,7 @@
 #include <distance_matrix.h>
 #include <vptree.h>
 #include <utils.h>
-
+#include <bitmatrixshuffle.h>
 
 namespace bms
 {
