@@ -205,7 +205,7 @@ int main(int argc, char ** argv)
     else if(!no_reorder) //If reorder enabled and no order was given, compute it
     {
         double metric = bms::compute_order_from_matrix_columns(input_path, header, columns, NB_ROWS, groupsize, subsampled_rows, order);
-        double predicted_metric = predict_metric_from_threshold(threshold);
+        double predicted_metric = bms::predict_metric_from_threshold(threshold);
 
         //If default threshold and reordering would decrease compressibility, override linear regression and don't reorder
         if(user_threshold && metric < predicted_metric)
