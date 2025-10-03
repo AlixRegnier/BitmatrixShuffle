@@ -52,7 +52,7 @@ namespace bms
         std::fill(matrix.begin(), matrix.end(), BMS_NULL_DISTANCE);
     }
 
-    void DistanceMatrix::write_as_phylip(const std::string& path, unsigned short max_decimals)
+    void DistanceMatrix::write_as_phylip(const std::string& path, unsigned short max_decimals) const
     {
         std::ofstream s(path, std::ios::out);
         s << std::setprecision(max_decimals);
