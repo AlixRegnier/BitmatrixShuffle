@@ -51,7 +51,7 @@ int main(int argc, char ** argv)
             ("p,preset", "Require '--compress-to'. Compression preset level [1-22] {3}.", cxxopts::value<unsigned>())
             ("r,reverse", "Require '-f'. Invert permutation (retrieve original matrix).")
             ("s,subsample-size", "Number of rows to use for distance computation {20000}.", cxxopts::value<std::size_t>())
-            ("threshold", "Uses a precomputed linear regression to predict reordering improvement.", cxxopts::value<double>());
+            ("threshold", "Uses a precomputed linear regression to predict reordering improvement.", cxxopts::value<double>())
             ("t,to-order", "Write out permutation file to path.", cxxopts::value<std::string>());
 
         auto args = options.parse(argc, argv);
