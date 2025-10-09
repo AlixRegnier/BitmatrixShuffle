@@ -27,7 +27,7 @@ namespace bms
     IndexDistance find_closest_vertex(VPTree<std::uint64_t>& VPTREE, const std::size_t VERTEX, const std::vector<bool>& ALREADY_ADDED);
 
     //Hamming distance between two buffers
-    std::size_t hamming_distance(const char* const BUFFER1, const char* const BUFFER2, const std::size_t LENGTH);
+    std::size_t hamming_distance(const std::uint8_t* const BUFFER1, const std::uint8_t* const BUFFER2, const std::size_t LENGTH);
 };
 
 #endif

@@ -248,7 +248,7 @@ int main(int argc, char ** argv)
             std::cout << "Warning: Subsampled rows (" << subsampled_rows << ") exceeds row count (" << NB_ROWS << "). Clamping to " << NB_ROWS << " rows." << std::endl;
             subsampled_rows = NB_ROWS;
         }
-        bms::compute_order_from_matrix_columns(input_path, header, columns, NB_ROWS, groupsize, subsampled_rows, order);
+        
         START_TIMER;
         double metric = bms::compute_order_from_matrix_columns(input_path, header, columns, NB_ROWS, groupsize, subsampled_rows, order);
         END_TIMER;
