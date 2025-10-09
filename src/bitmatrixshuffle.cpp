@@ -203,14 +203,15 @@ namespace bms
         {
             //Find a suboptimal path minimizing the weight of edges and visiting each node once
             computed_distances += build_double_ended_NN(transposed_matrix, distanceMatrix, subsampled_rows, offset, order);
-            
+            distanceMatrix.write_as_phylip("distance_matrix." + std::to_string(i) + ".phylip");
             offset += groupsize;
             distanceMatrix.reset(); //Clean distance matrix
         }
 
         distanceMatrix.resize(last_group_size);
         computed_distances += build_double_ended_NN(transposed_matrix, distanceMatrix, subsampled_rows, offset, order);
-        
+        distanceMatrix.write_as_phylip("distance_matrix." + std::to_string(NB_GROUPS) + ".phylip");
+
         
         END_TIMER;
         metrics["3_time_permutation(s)"] = GET_TIMER; 
@@ -222,7 +223,7 @@ namespace bms
 
         //Try distance estimation to further extract error bounds
         #define FAKE_SIZE 4096
-        if(ROW_LENGTH*8 > FAKE_SIZE)
+        if(false && ROW_LENGTH*8 > FAKE_SIZE)
         {
             DistanceMatrix fake_distanceMatrix(FAKE_SIZE);
             std::vector<std::uint64_t> fake_order;

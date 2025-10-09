@@ -42,8 +42,6 @@ namespace bms
         END_TIMER;
         metrics["3_time_distance_computation(s)"] = ((double)metrics["3_time_distance_computation(s)"]) + GET_TIMER;
 
-        distanceMatrix.write_as_phylip("distance_matrix." + std::to_string(OFFSET / distanceMatrix.width()) + ".phylip");
-
         //Find second vertex
         IndexDistance second = find_closest_vertex(distanceMatrix, firstVertex, alreadyAdded);
         
