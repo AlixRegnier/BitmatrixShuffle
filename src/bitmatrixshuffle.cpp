@@ -4,6 +4,7 @@
 #include <immintrin.h>
 #include <emmintrin.h>
 #include <stdint.h>
+#include <cmath>
 
 #define GET_ROW_PTR(x) (mapped_file+HEADER+((std::size_t)(x))*ROW_LENGTH)
 #define GET_BLOCK_PTR(x) (mapped_file+HEADER+((std::size_t)(x))*BLOCK_SIZE)
@@ -386,6 +387,30 @@ namespace bms
         for(std::size_t i = 0; i < length; ++counts[bytes[i++]]);
     }
 
+    double compute_byte_entropy(const std::size_t * counts)
+    {
+        //Shannon Entropy
+        double entropy = 0.0;
+        std::size_t total = 0;
+
+        int i;
+
+        for(i = 0; i < 256; ++i) 
+            total += counts[i];
+        
+        //Shannon Entropy: -Sigma p(x) * log2(p(x)); p(x) = byte frequency
+        for(i = 0; i < 256; ++i)
+        {
+            if(counts[i] > 0)
+            {
+                double px = (1.0 * counts[i]) / total;
+                entropy -= px * std::log2(px);
+            }
+        }
+
+        return entropy;
+    }
+
     void reorder_matrix_columns_and_compress(const std::string& MATRIX_PATH, const std::string& OUTPUT_PATH, const std::string& OUTPUT_EF_PATH, const std::string& CONFIG_PATH, const unsigned HEADER, const std::size_t NB_COLS, const std::size_t NB_ROWS, const std::vector<std::uint64_t>& ORDER, std::size_t BLOCK_TARGET_SIZE)
     {
         DECLARE_TIMER;
@@ -440,6 +465,10 @@ namespace bms
         count_bytes_reordered.resize(256);
 
         std::size_t i = 0;
+
+        std::vector<double> entropy_ratios;
+        entropy_ratios.resize(NB_BLOCKS);
+
         //Process each blocks except the last
         for(; i + 1 < NB_BLOCKS; ++i)
         {
@@ -469,6 +498,8 @@ namespace bms
             block_compressor.append_block(reinterpret_cast<std::uint8_t*>(buffered_block), BLOCK_SIZE);
             END_TIMER;
             time_compression += __integral_time;
+
+            entropy_ratios[i] = compute_byte_entropy(count_bytes_original.data()) / compute_byte_entropy(count_bytes_reordered.data());
         }
 
         __count_bytes(reinterpret_cast<std::uint8_t*>(GET_BLOCK_PTR(i)), last_block_size, count_bytes_original.data());
@@ -482,6 +513,7 @@ namespace bms
         time_reorder += __integral_time;
 
         __count_bytes(reinterpret_cast<std::uint8_t*>(buffered_block), last_block_size, count_bytes_reordered.data());
+        entropy_ratios[i] = compute_byte_entropy(count_bytes_original.data()) / compute_byte_entropy(count_bytes_reordered.data());
 
         START_TIMER;
         block_compressor.append_block(reinterpret_cast<std::uint8_t*>(buffered_block), last_block_size);
@@ -496,6 +528,7 @@ namespace bms
         
         metrics["4_histogram_original"] = count_bytes_original;
         metrics["4_histogram_reordered"] = count_bytes_reordered;
+        metrics["4_entropy_ratios"] = entropy_ratios;
 
         BMS_DELETE_MATRIX(buffered_block);
         BMS_DELETE_MATRIX(transposed_block);
