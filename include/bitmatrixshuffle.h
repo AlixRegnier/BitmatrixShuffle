@@ -46,6 +46,8 @@ namespace bms
 
     //Return how much the compression will be improved according to metric returned by 'compute_order_from_matrix_columns'
     
+    double get_entropy_ratio(const std::string& MATRIX_PATH, const unsigned HEADER, const std::size_t NB_COLS, const std::size_t NB_ROWS, const std::vector<std::uint64_t>& ORDER, std::size_t SAMPLED_BYTES = 8388608);
+
     constexpr double predict_metric_from_threshold(double threshold)
     {
         return threshold * BMS_REGRESSION_SLOPE + BMS_REGRESSION_INTERCEPT;
