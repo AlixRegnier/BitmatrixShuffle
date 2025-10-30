@@ -453,7 +453,7 @@ namespace bms
         std::uint64_t count_bytes_reordered[256] = {};
 
         
-        std::ssize_t read_bytes = read(fd, buffered_block, BLOCK_SIZE);
+        ssize_t read_bytes = read(fd, buffered_block, BLOCK_SIZE);
         close(fd); 
 
         if(read_bytes == -1)

@@ -254,7 +254,7 @@ int main(int argc, char ** argv)
         END_TIMER;
 
 
-        double entropy_ratio = get_entropy_ratio(input_path, header, columns, NB_ROWS, order);
+        double entropy_ratio = bms::get_entropy_ratio(input_path, header, columns, NB_ROWS, order);
         metrics["2b_entropy_ratio"] = entropy_ratio;
 
         metrics["3_time_permutation(s)"] = GET_TIMER;
