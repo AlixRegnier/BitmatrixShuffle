@@ -316,6 +316,58 @@ namespace bms
         return original_consecutive_distances_sum / new_consecutive_distances_sum;
     }
 
+    void __count_bytes(const std::uint8_t * bytes, const std::size_t length, std::uint64_t * counts)
+    {
+        for(std::size_t i = 0; i < length; ++counts[bytes[i++]]);
+    }
+
+    double compute_byte_entropy(const std::uint64_t * counts)
+    {
+        //Shannon Entropy
+        double entropy = 0.0;
+        std::size_t total = 0;
+
+        int i;
+
+        for(i = 0; i < 256; ++i) 
+            total += counts[i];
+        
+        //Shannon Entropy: -Sigma p(x) * log2(p(x)); p(x) = byte frequency
+        for(i = 0; i < 256; ++i)
+        {
+            if(counts[i] > 0)
+            {
+                double px = (1.0 * counts[i]) / total;
+                entropy -= px * std::log2(px);
+            }
+        }
+
+        return entropy;
+    }
+
+    void reorder_block(const char * input_block, char * tmp_block, char * output_block, const std::size_t BLOCK_SIZE, const std::size_t BLOCK_NB_ROWS, const std::size_t ROW_LENGTH, const std::vector<std::uint64_t>& ORDER)
+    {
+        //Copy block from disk to memory
+        if(input_block != output_block)
+            std::memcpy(output_block, input_block, BLOCK_SIZE);
+
+        //Transpose matrix block
+        __sse2_trans(reinterpret_cast<const std::uint8_t*>(output_block), reinterpret_cast<std::uint8_t*>(tmp_block), BLOCK_NB_ROWS, ROW_LENGTH*8);
+        
+        //Reorder block columns (by reordering transposed block rows)
+        reorder_matrix_rows(tmp_block, 0, BLOCK_NB_ROWS/8, ORDER);
+        
+        //Transpose matrix block back
+        __sse2_trans(reinterpret_cast<const std::uint8_t*>(tmp_block), reinterpret_cast<std::uint8_t*>(output_block), ROW_LENGTH*8, BLOCK_NB_ROWS);
+    }
+
+    double get_block_entropy(const char * block_ptr, const std::size_t BLOCK_SIZE, std::uint64_t * counts)
+    {
+        __count_bytes(reinterpret_cast<const std::uint8_t*>(block_ptr), BLOCK_SIZE, counts);
+        return compute_byte_entropy(counts);
+    }
+
+
     void reorder_matrix_columns(const std::string& MATRIX_PATH, const unsigned HEADER, const std::size_t NB_COLS, const std::size_t NB_ROWS, const std::vector<std::uint64_t>& ORDER, const std::size_t BLOCK_TARGET_SIZE)
     {
         //Get row length in bytes
@@ -353,26 +405,17 @@ namespace bms
         std::size_t i = 0;
         for(; i + 1 < NB_BLOCKS; ++i)
         {
-            //Copy block from disk to memory
-            std::memcpy(buffered_block, GET_BLOCK_PTR(i), BLOCK_SIZE);
-
-            //Transpose matrix block
-            __sse2_trans(reinterpret_cast<const std::uint8_t*>(buffered_block), reinterpret_cast<std::uint8_t*>(transposed_block), BLOCK_NB_ROWS, ROW_LENGTH*8);
-
-            //Reorder block columns (by reordering transposed block rows)
-            reorder_matrix_rows(transposed_block, 0, BLOCK_NB_ROWS/8, ORDER);
-
-            //Transpose matrix block back
-            __sse2_trans(reinterpret_cast<const std::uint8_t*>(transposed_block), reinterpret_cast<std::uint8_t*>(buffered_block), ROW_LENGTH*8, BLOCK_NB_ROWS);
-
+            //Reorder block
+            reorder_block(GET_BLOCK_PTR(i), transposed_block, buffered_block, BLOCK_SIZE, BLOCK_NB_ROWS, ROW_LENGTH, ORDER);
+            
             //Copy block from memory to disk
             std::memcpy(GET_BLOCK_PTR(i), buffered_block, BLOCK_SIZE);
         }
 
-        std::memcpy(buffered_block, GET_BLOCK_PTR(i), last_block_size);
-        __sse2_trans(reinterpret_cast<const std::uint8_t*>(buffered_block), reinterpret_cast<std::uint8_t*>(transposed_block), BLOCK_NB_ROWS, ROW_LENGTH*8);
-        reorder_matrix_rows(transposed_block, 0, BLOCK_NB_ROWS/8, ORDER);
-        __sse2_trans(reinterpret_cast<const std::uint8_t*>(transposed_block), reinterpret_cast<std::uint8_t*>(buffered_block), ROW_LENGTH*8, BLOCK_NB_ROWS);
+        //Reorder last block
+        reorder_block(GET_BLOCK_PTR(i), transposed_block, buffered_block, last_block_size, BLOCK_NB_ROWS, ROW_LENGTH, ORDER);
+
+        //Copy last block from memory to disk 
         std::memcpy(GET_BLOCK_PTR(i), buffered_block, last_block_size);
 
         BMS_DELETE_MATRIX(buffered_block);
@@ -382,33 +425,51 @@ namespace bms
         close(fd);
     }
 
-    void __count_bytes(const std::uint8_t * bytes, const std::size_t length, std::size_t * counts)
+    double get_entropy_ratio(const std::string& MATRIX_PATH, const unsigned HEADER, const std::size_t NB_COLS, const std::size_t NB_ROWS, const std::vector<std::uint64_t>& ORDER, std::size_t SAMPLED_BYTES)
     {
-        for(std::size_t i = 0; i < length; ++counts[bytes[i++]]);
-    }
+        //Get row length in bytes
+        const std::size_t ROW_LENGTH = (NB_COLS + 7) / 8;
 
-    double compute_byte_entropy(const std::size_t * counts)
-    {
-        //Shannon Entropy
-        double entropy = 0.0;
-        std::size_t total = 0;
+        //Compute the number of rows in a block and round to next multiple of 8 
+        const std::size_t BLOCK_NB_ROWS = target_block_nb_rows(NB_COLS, SAMPLED_BYTES);
 
-        int i;
-
-        for(i = 0; i < 256; ++i) 
-            total += counts[i];
+        //Block size will most of time be slightly bigger than targeted size
+        const std::size_t BLOCK_SIZE = target_block_size(NB_COLS, SAMPLED_BYTES); 
         
-        //Shannon Entropy: -Sigma p(x) * log2(p(x)); p(x) = byte frequency
-        for(i = 0; i < 256; ++i)
-        {
-            if(counts[i] > 0)
-            {
-                double px = (1.0 * counts[i]) / total;
-                entropy -= px * std::log2(px);
-            }
-        }
+        //Compute last block size
+        std::size_t last_block_size = (NB_ROWS % BLOCK_NB_ROWS) * ROW_LENGTH;
+        if(last_block_size == 0)
+            last_block_size = BLOCK_SIZE; //Each blocks are full, so last is full
 
-        return entropy;
+        char * buffered_block = BMS_ALLOCATE_MATRIX(BLOCK_NB_ROWS, ROW_LENGTH*8);
+        char * transposed_block = BMS_ALLOCATE_MATRIX(BLOCK_NB_ROWS, ROW_LENGTH*8);
+    
+        int fd = open(MATRIX_PATH.c_str(), O_RDONLY);
+
+        //Skip header
+        lseek(fd, HEADER, SEEK_SET);
+
+        std::uint64_t count_bytes_original[256] = {};
+        std::uint64_t count_bytes_reordered[256] = {};
+
+        
+        std::ssize_t read_bytes = read(fd, buffered_block, BLOCK_SIZE);
+        close(fd); 
+
+        if(read_bytes == -1)
+            throw std::runtime_error("BMS-ERROR: An error occured while trying to read input matrix");
+        
+        if(read_bytes % ROW_LENGTH != 0)
+            throw std::runtime_error("BMS-ERROR: Input matrix size is not a multiple of the size of a row");
+
+        double entropy_original = get_block_entropy(buffered_block, read_bytes, count_bytes_original);
+        reorder_block(buffered_block, transposed_block, buffered_block, read_bytes, BLOCK_NB_ROWS, ROW_LENGTH, ORDER);
+        double entropy_reordered = get_block_entropy(buffered_block, read_bytes, count_bytes_reordered);
+        
+        BMS_DELETE_MATRIX(buffered_block);
+        BMS_DELETE_MATRIX(transposed_block);
+
+        return entropy_original / entropy_reordered;
     }
 
     void reorder_matrix_columns_and_compress(const std::string& MATRIX_PATH, const std::string& OUTPUT_PATH, const std::string& OUTPUT_EF_PATH, const std::string& CONFIG_PATH, const unsigned HEADER, const std::size_t NB_COLS, const std::size_t NB_ROWS, const std::vector<std::uint64_t>& ORDER, std::size_t BLOCK_TARGET_SIZE)
@@ -459,39 +520,15 @@ namespace bms
         END_TIMER;
         time_compression += __integral_time;
 
-        std::vector<std::size_t> count_bytes_original;
-        std::vector<std::size_t> count_bytes_reordered;
-        count_bytes_original.resize(256);
-        count_bytes_reordered.resize(256);
-
+        
         std::size_t i = 0;
-
-        std::vector<double> entropy_ratios;
-        entropy_ratios.resize(NB_BLOCKS);
-
         //Process each blocks except the last
         for(; i + 1 < NB_BLOCKS; ++i)
         {
-            //METRIC :: COUNT_BYTES
-            __count_bytes(reinterpret_cast<std::uint8_t*>(GET_BLOCK_PTR(i)), BLOCK_SIZE, count_bytes_original.data());
-
             START_TIMER;
-            //Copy block from disk to memory
-            std::memcpy(buffered_block, GET_BLOCK_PTR(i), BLOCK_SIZE);
-
-            //Transpose matrix block
-            __sse2_trans(reinterpret_cast<const std::uint8_t*>(buffered_block), reinterpret_cast<std::uint8_t*>(transposed_block), BLOCK_NB_ROWS, ROW_LENGTH*8);
-            
-            //Reorder block columns (by reordering transposed block rows)
-            reorder_matrix_rows(transposed_block, 0, BLOCK_NB_ROWS/8, ORDER);
-            
-            //Transpose matrix block back
-            __sse2_trans(reinterpret_cast<const std::uint8_t*>(transposed_block), reinterpret_cast<std::uint8_t*>(buffered_block), ROW_LENGTH*8, BLOCK_NB_ROWS);
+            reorder_block(GET_BLOCK_PTR(i), transposed_block, buffered_block, BLOCK_SIZE, BLOCK_NB_ROWS, ROW_LENGTH, ORDER);
             END_TIMER;
             time_reorder += __integral_time;
-
-            //METRIC :: COUNT_BYTES (reordered)
-            __count_bytes(reinterpret_cast<std::uint8_t*>(buffered_block), BLOCK_SIZE, count_bytes_reordered.data());
 
             //Bring buffered block to compressor
             START_TIMER;
@@ -499,22 +536,15 @@ namespace bms
             END_TIMER;
             time_compression += __integral_time;
 
-            entropy_ratios[i] = compute_byte_entropy(count_bytes_original.data()) / compute_byte_entropy(count_bytes_reordered.data());
         }
 
-        __count_bytes(reinterpret_cast<std::uint8_t*>(GET_BLOCK_PTR(i)), last_block_size, count_bytes_original.data());
         //Handle last block that may be smaller, only block effective size differs
         START_TIMER;
-        std::memcpy(buffered_block, GET_BLOCK_PTR(i), last_block_size);
-        __sse2_trans(reinterpret_cast<const std::uint8_t*>(buffered_block), reinterpret_cast<std::uint8_t*>(transposed_block), BLOCK_NB_ROWS, ROW_LENGTH*8);
-        reorder_matrix_rows(transposed_block, 0, BLOCK_NB_ROWS/8, ORDER);
-        __sse2_trans(reinterpret_cast<const std::uint8_t*>(transposed_block), reinterpret_cast<std::uint8_t*>(buffered_block), ROW_LENGTH*8, BLOCK_NB_ROWS);
+        reorder_block(GET_BLOCK_PTR(i), transposed_block, buffered_block, last_block_size, BLOCK_NB_ROWS, ROW_LENGTH, ORDER);
         END_TIMER;
         time_reorder += __integral_time;
 
-        __count_bytes(reinterpret_cast<std::uint8_t*>(buffered_block), last_block_size, count_bytes_reordered.data());
-        entropy_ratios[i] = compute_byte_entropy(count_bytes_original.data()) / compute_byte_entropy(count_bytes_reordered.data());
-
+        //Bring last block to compressor
         START_TIMER;
         block_compressor.append_block(reinterpret_cast<std::uint8_t*>(buffered_block), last_block_size);
 
@@ -525,10 +555,6 @@ namespace bms
 
         metrics["3_time_compression(s)"] = time_compression / 1000.0;
         metrics["3_time_reorder(s)"] = time_reorder / 1000.0;
-        
-        metrics["4_histogram_original"] = count_bytes_original;
-        metrics["4_histogram_reordered"] = count_bytes_reordered;
-        metrics["4_entropy_ratios"] = entropy_ratios;
 
         BMS_DELETE_MATRIX(buffered_block);
         BMS_DELETE_MATRIX(transposed_block);
