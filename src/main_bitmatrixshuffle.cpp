@@ -253,6 +253,10 @@ int main(int argc, char ** argv)
         double metric = bms::compute_order_from_matrix_columns(input_path, header, columns, NB_ROWS, groupsize, subsampled_rows, order);
         END_TIMER;
 
+
+        double entropy_ratio = get_entropy_ratio(input_path, header, columns, NB_ROWS, order);
+        metrics["2b_entropy_ratio"] = entropy_ratio;
+
         metrics["3_time_permutation(s)"] = GET_TIMER;
 
         double predicted_metric = bms::predict_metric_from_threshold(threshold);
