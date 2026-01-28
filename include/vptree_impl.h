@@ -6,6 +6,9 @@
 namespace bms 
 {
     template <class T>
+    //Modification: distances vector is copied when median needs to be computed (nlogn sort), then we can retrieve corresponding distances in same order
+    //distances vector scope is bigger because used for vertex left/right assignation
+    //We don't distFunct->get anymore, set to return BMS_NULL_DISTANCE. 
     void VPTree<T>::init(const std::vector<T>& vertices)
     {
         if(vertices.size() == 0)
@@ -30,7 +33,6 @@ namespace bms
             for(std::size_t i = 0; i < pivotIndex; ++i)
             {
                 double d = distFunc->compute(pivot, vertices[i]);
-                distFunc->store(pivot, vertices[i], d);
                 distances.push_back(d);
             }
 
@@ -38,36 +40,35 @@ namespace bms
             for(std::size_t i = pivotIndex+1; i < vertices.size(); ++i)
             {
                 double d = distFunc->compute(pivot, vertices[i]);
-                distFunc->store(pivot, vertices[i], d);
                 distances.push_back(d);
             }
 
             //nlog(n) median but should be quick as it needs to sort small lists which size decrease
             threshold = nlogn_median(distances);
             //threshold = quickselect_median(distances);
-        }
 
-        //Divide space by two
-        std::vector<T> leftVertices, rightVertices;
-        leftVertices.reserve(vertices.size()/2);
-        rightVertices.reserve(vertices.size()/2);
+            //Divide space by two
+            std::vector<T> leftVertices, rightVertices;
+            leftVertices.reserve(vertices.size()/2);
+            rightVertices.reserve(vertices.size()/2);
 
-        //Before pivot
-        for(std::size_t i = 0; i < pivotIndex; ++i)
-        {
-            if(distFunc->get(pivot, vertices[i]) < threshold)
-                leftVertices.push_back(vertices[i]);
-            else
-                rightVertices.push_back(vertices[i]);
-        }
+            //Before pivot
+            for(std::size_t i = 0; i < pivotIndex; ++i)
+            {
+                if(distances[i] < threshold)
+                    leftVertices.push_back(vertices[i]);
+                else
+                    rightVertices.push_back(vertices[i]);
+            }
 
-        //After pivot
-        for(std::size_t i = pivotIndex+1; i < vertices.size(); ++i)
-        {
-            if(distFunc->get(pivot, vertices[i]) < threshold)
-                leftVertices.push_back(vertices[i]);
-            else
-                rightVertices.push_back(vertices[i]);
+            //After pivot
+            for(std::size_t i = pivotIndex+1; i < vertices.size(); ++i)
+            {
+                if(distance[i-1] < threshold) //Shifted by one because pivot 
+                    leftVertices.push_back(vertices[i]);
+                else
+                    rightVertices.push_back(vertices[i]);
+            }
         }
 
         if(leftVertices.size() > 0)
@@ -110,12 +111,7 @@ namespace bms
             throw std::runtime_error("ERROR: Can't query invalid vertex");
 
         //Check if distance already has been computed
-        double distance = distFunc->get(pivot, query);
-        if(distance == BMS_NULL_DISTANCE)
-        {
-            distance = distFunc->compute(pivot, query); //Sad we have to compute it
-            distFunc->store(pivot, query, distance); //Store it if needed later
-        }
+        double distance = distFunc->compute(pivot, query);
 
         if(!alreadyAdded[pivot] && distance < *tau) //See if it prevents algorithm from converging (since tau is not updated), it shouldn't as there are no cycles
         {

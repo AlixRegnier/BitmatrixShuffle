@@ -173,13 +173,16 @@ namespace bms {
 
         std::size_t counter = 0;
 
+        //No distance matrix
         DistanceFunctions df = VPTree<std::uint64_t>::bind_distance_functions(
             [=, &counter](std::uint64_t a, std::uint64_t b) -> double {
                 ++counter;
                 return columns_hamming_distance(MATRIX, SUBSAMPLED_ROWS, a+OFFSET, b+OFFSET);
             },
-            [&distanceMatrix](std::uint64_t a, std::uint64_t b) -> double { return distanceMatrix.get(a, b); },
-            [&distanceMatrix](std::uint64_t a, std::uint64_t b, double d) { distanceMatrix.set(a, b, d); }
+            [&distanceMatrix](std::uint64_t a, std::uint64_t b) -> double { 
+                return BMS_NULL_DISTANCE;
+            },
+            [&distanceMatrix](std::uint64_t a, std::uint64_t b, double d) { return; }
         );
 
         VPTree<std::uint64_t> root(vertices, &df);
@@ -225,14 +228,16 @@ namespace bms {
 
         std::size_t counter = 0;
 
-        //Use counter to count how many distance computation could be avoided by using a VPTree
+        //No distance matrix
         DistanceFunctions df = VPTree<std::uint64_t>::bind_distance_functions(
             [=, &counter](std::uint64_t a, std::uint64_t b) -> double {
                 ++counter;
                 return columns_hamming_distance(MATRIX, SUBSAMPLED_ROWS, a+OFFSET, b+OFFSET);
             },
-            [&distanceMatrix](std::uint64_t a, std::uint64_t b) -> double { return distanceMatrix.get(a, b); },
-            [&distanceMatrix](std::uint64_t a, std::uint64_t b, double d) { distanceMatrix.set(a, b, d); }
+            [&distanceMatrix](std::uint64_t a, std::uint64_t b) -> double { 
+                return BMS_NULL_DISTANCE;
+            },
+            [&distanceMatrix](std::uint64_t a, std::uint64_t b, double d) { return; }
         );
 
         VPTree<std::uint64_t> root(vertices, &df);
