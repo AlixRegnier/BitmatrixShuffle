@@ -28,7 +28,7 @@ namespace bms
             VPTree* left = nullptr;
             VPTree* right = nullptr;
             
-            bool skip = false;
+            //bool skip = false; //removed for naive versionCl
             T pivot; //Vertex (or vertex identifier) that is used to split space in two parts
             double threshold; //Median of pivot distances from other vertices
             DistanceFunctions<T>* distFunc;        
