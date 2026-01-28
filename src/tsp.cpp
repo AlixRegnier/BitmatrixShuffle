@@ -173,22 +173,11 @@ namespace bms {
 
         std::size_t counter = 0;
 
-        DistanceFunctions df = VPTree<std::uint64_t>::bind_distance_functions(
-            [=, &counter](std::uint64_t a, std::uint64_t b) -> double {
-                ++counter;
-                return columns_hamming_distance(MATRIX, SUBSAMPLED_ROWS, a+OFFSET, b+OFFSET);
-            },
-            [&distanceMatrix](std::uint64_t a, std::uint64_t b) -> double { return distanceMatrix.get(a, b); },
-            [&distanceMatrix](std::uint64_t a, std::uint64_t b, double d) { distanceMatrix.set(a, b, d); }
-        );
-
-        VPTree<std::uint64_t> root(vertices, &df);
-
         //Added second vertex to data structures
         //Find next vertices to add by checking which is the minimum to take
         for(std::size_t i = 1; i < distanceMatrix.width(); ++i)
         {
-            IndexDistance match = find_closest_vertex(root, path[i-1], alreadyAdded);
+            IndexDistance match = find_closest_vertex(MATRIX, path[i-1], alreadyAdded, SUBSAMPLED_ROWS, OFFSET);
             alreadyAdded[match.index] = true;
             path.push_back(match.index);
         }
@@ -225,28 +214,17 @@ namespace bms {
 
         std::size_t counter = 0;
 
-        //Use counter to count how many distance computation could be avoided by using a VPTree
-        DistanceFunctions df = VPTree<std::uint64_t>::bind_distance_functions(
-            [=, &counter](std::uint64_t a, std::uint64_t b) -> double {
-                ++counter;
-                return columns_hamming_distance(MATRIX, SUBSAMPLED_ROWS, a+OFFSET, b+OFFSET);
-            },
-            [&distanceMatrix](std::uint64_t a, std::uint64_t b) -> double { return distanceMatrix.get(a, b); },
-            [&distanceMatrix](std::uint64_t a, std::uint64_t b, double d) { distanceMatrix.set(a, b, d); }
-        );
-
-        VPTree<std::uint64_t> root(vertices, &df);
 
         //Find second vertex
-        IndexDistance second = find_closest_vertex(root, firstVertex, alreadyAdded);
+        IndexDistance second = find_closest_vertex(MATRIX, firstVertex, alreadyAdded, SUBSAMPLED_ROWS, OFFSET);
         
         //Added second vertex to data structures
         orderDeque.push_back(second.index);
         alreadyAdded[second.index] = true;
 
         //Find closest vertices from path front and back
-        IndexDistance a = find_closest_vertex(root, orderDeque.front(), alreadyAdded);
-        IndexDistance b = find_closest_vertex(root, orderDeque.back(), alreadyAdded);
+        IndexDistance a = find_closest_vertex(MATRIX, orderDeque.front(), alreadyAdded, SUBSAMPLED_ROWS, OFFSET);
+        IndexDistance b = find_closest_vertex(MATRIX, orderDeque.back(), alreadyAdded, SUBSAMPLED_ROWS, OFFSET);
 
         //Find next vertices to add by checking which is the minimum to take
         for(std::size_t i = 2; i < distanceMatrix.width(); ++i)
@@ -257,9 +235,9 @@ namespace bms {
                 alreadyAdded[a.index] = true;
 
                 if(a.index == b.index)
-                    b = find_closest_vertex(root, orderDeque.back(), alreadyAdded);
+                    b = find_closest_vertex(MATRIX, orderDeque.back(), alreadyAdded, SUBSAMPLED_ROWS, OFFSET);
 
-                a = find_closest_vertex(root, orderDeque.front(), alreadyAdded);
+                a = find_closest_vertex(MATRIX, orderDeque.front(), alreadyAdded, SUBSAMPLED_ROWS, OFFSET);
             }
             else
             {
@@ -267,9 +245,9 @@ namespace bms {
                 alreadyAdded[b.index] = true;
 
                 if(b.index == a.index)
-                    a = find_closest_vertex(root, orderDeque.front(), alreadyAdded);
+                    a = find_closest_vertex(MATRIX, orderDeque.front(), alreadyAdded, SUBSAMPLED_ROWS, OFFSET);
 
-                b = find_closest_vertex(root, orderDeque.back(), alreadyAdded);
+                b = find_closest_vertex(MATRIX, orderDeque.back(), alreadyAdded, SUBSAMPLED_ROWS, OFFSET);
             }
         }
 
@@ -282,10 +260,22 @@ namespace bms {
         return counter;
     }
 
-    IndexDistance find_closest_vertex(VPTree<std::uint64_t>& VPTREE, const std::uint64_t VERTEX, const std::vector<bool>& ALREADY_ADDED)
+    IndexDistance find_closest_vertex(const char * const MATRIX, const std::uint64_t VERTEX, const std::vector<bool>& ALREADY_ADDED, const std::size_t SUBSAMPLED_ROWS, const std::size_t OFFSET)
     {
         IndexDistance nn = {0, 2.0};
-        VPTREE.get_unvisited_nearest_neighbor(VERTEX, ALREADY_ADDED, &nn.distance, &nn.index);
+        for(std::uint64_t i = 0; i < ALREADY_ADDED.size(); ++i)
+        {
+            if(VERTEX != i && ALREADY_ADDED[i])
+            {
+                double d = columns_hamming_distance(MATRIX, SUBSAMPLED_ROWS, i+OFFSET, VERTEX+OFFSET);
+
+                if(d < nn.distance)
+                {
+                    nn.distance = d;
+                    nn.index = i;
+                }
+            }
+        }
 
         return nn;
     }
