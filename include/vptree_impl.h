@@ -24,6 +24,11 @@ namespace bms
         std::size_t pivotIndex = RNG::rand_uint32_t(0, vertices.size());
         pivot = vertices[pivotIndex];
 
+        //Divide space by two
+        std::vector<T> leftVertices, rightVertices;
+        leftVertices.reserve(vertices.size()/2);
+        rightVertices.reserve(vertices.size()/2);
+
         //Distance scope
         {
             std::vector<double> distances;
@@ -47,11 +52,6 @@ namespace bms
             threshold = nlogn_median(distances);
             //threshold = quickselect_median(distances);
 
-            //Divide space by two
-            std::vector<T> leftVertices, rightVertices;
-            leftVertices.reserve(vertices.size()/2);
-            rightVertices.reserve(vertices.size()/2);
-
             //Before pivot
             for(std::size_t i = 0; i < pivotIndex; ++i)
             {
@@ -64,7 +64,7 @@ namespace bms
             //After pivot
             for(std::size_t i = pivotIndex+1; i < vertices.size(); ++i)
             {
-                if(distance[i-1] < threshold) //Shifted by one because pivot 
+                if(distances[i-1] < threshold) //Shifted by one because pivot 
                     leftVertices.push_back(vertices[i]);
                 else
                     rightVertices.push_back(vertices[i]);
