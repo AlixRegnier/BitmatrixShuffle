@@ -262,26 +262,6 @@ namespace bms
         metrics["2a_max_computable_distances"] = max_computable_distances;
         metrics["2a_pct_computed_distances(%)"] = 100.0 * computed_distances / max_computable_distances;
 
-        //Try distance estimation to further extract error bounds
-        #define FAKE_SIZE 4096
-        if(ROW_LENGTH*8 > FAKE_SIZE)
-        {
-            DistanceMatrix fake_distanceMatrix(FAKE_SIZE);
-            std::vector<std::uint64_t> fake_order;
-            fake_order.resize(FAKE_SIZE);
-            std::size_t fake_computed_distances = build_double_ended_NN(transposed_matrix, fake_distanceMatrix, subsampled_rows, 0, fake_order);
-            std::size_t fake_max_computable_distances = (FAKE_SIZE * (FAKE_SIZE - 1)) / 2.0;
-            metrics["2c_fake_computed_distances"] = fake_computed_distances;
-            metrics["2c_fake_max_computable_distances"] = fake_max_computable_distances;
-            metrics["2c_fake_pct_computed_distances(%)"] = 100.0 * fake_computed_distances / fake_max_computable_distances;
-            
-            std::size_t estimated_computed_distances = estimate_computations(FAKE_SIZE, groupsize, fake_computed_distances) * NB_GROUPS + estimate_computations(FAKE_SIZE, last_group_size, fake_computed_distances);
-            metrics["2c_estimated_computed_distances"] = estimated_computed_distances;
-
-            metrics["2c_estimation_error(%)"] = 100.0 * (std::max(estimated_computed_distances, computed_distances) - std::min(estimated_computed_distances, computed_distances)) / estimated_computed_distances;
-        }
-        #undef FAKE_SIZE
-
         double original_consecutive_distances_average = original_consecutive_distances_sum / (ROW_LENGTH*8 - 1);
         double new_consecutive_distances_average = new_consecutive_distances_sum / (ROW_LENGTH*8 - 1);
 
