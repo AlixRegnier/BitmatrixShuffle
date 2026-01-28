@@ -177,7 +177,7 @@ namespace bms {
         //Find next vertices to add by checking which is the minimum to take
         for(std::size_t i = 1; i < distanceMatrix.width(); ++i)
         {
-            IndexDistance match = find_closest_vertex(MATRIX, path[i-1], alreadyAdded, SUBSAMPLED_ROWS, OFFSET);
+            IndexDistance match = find_closest_vertex(MATRIX, path[i-1], alreadyAdded, SUBSAMPLED_ROWS, OFFSET, counter);
             alreadyAdded[match.index] = true;
             path.push_back(match.index);
         }
@@ -216,15 +216,15 @@ namespace bms {
 
 
         //Find second vertex
-        IndexDistance second = find_closest_vertex(MATRIX, firstVertex, alreadyAdded, SUBSAMPLED_ROWS, OFFSET);
+        IndexDistance second = find_closest_vertex(MATRIX, firstVertex, alreadyAdded, SUBSAMPLED_ROWS, OFFSET, counter);
         
         //Added second vertex to data structures
         orderDeque.push_back(second.index);
         alreadyAdded[second.index] = true;
 
         //Find closest vertices from path front and back
-        IndexDistance a = find_closest_vertex(MATRIX, orderDeque.front(), alreadyAdded, SUBSAMPLED_ROWS, OFFSET);
-        IndexDistance b = find_closest_vertex(MATRIX, orderDeque.back(), alreadyAdded, SUBSAMPLED_ROWS, OFFSET);
+        IndexDistance a = find_closest_vertex(MATRIX, orderDeque.front(), alreadyAdded, SUBSAMPLED_ROWS, OFFSET, counter);
+        IndexDistance b = find_closest_vertex(MATRIX, orderDeque.back(), alreadyAdded, SUBSAMPLED_ROWS, OFFSET, counter);
 
         //Find next vertices to add by checking which is the minimum to take
         for(std::size_t i = 2; i < distanceMatrix.width(); ++i)
@@ -235,9 +235,9 @@ namespace bms {
                 alreadyAdded[a.index] = true;
 
                 if(a.index == b.index)
-                    b = find_closest_vertex(MATRIX, orderDeque.back(), alreadyAdded, SUBSAMPLED_ROWS, OFFSET);
+                    b = find_closest_vertex(MATRIX, orderDeque.back(), alreadyAdded, SUBSAMPLED_ROWS, OFFSET, counter);
 
-                a = find_closest_vertex(MATRIX, orderDeque.front(), alreadyAdded, SUBSAMPLED_ROWS, OFFSET);
+                a = find_closest_vertex(MATRIX, orderDeque.front(), alreadyAdded, SUBSAMPLED_ROWS, OFFSET, counter);
             }
             else
             {
@@ -245,9 +245,9 @@ namespace bms {
                 alreadyAdded[b.index] = true;
 
                 if(b.index == a.index)
-                    a = find_closest_vertex(MATRIX, orderDeque.front(), alreadyAdded, SUBSAMPLED_ROWS, OFFSET);
+                    a = find_closest_vertex(MATRIX, orderDeque.front(), alreadyAdded, SUBSAMPLED_ROWS, OFFSET, counter);
 
-                b = find_closest_vertex(MATRIX, orderDeque.back(), alreadyAdded, SUBSAMPLED_ROWS, OFFSET);
+                b = find_closest_vertex(MATRIX, orderDeque.back(), alreadyAdded, SUBSAMPLED_ROWS, OFFSET, counter);
             }
         }
 
@@ -260,13 +260,14 @@ namespace bms {
         return counter;
     }
 
-    IndexDistance find_closest_vertex(const char * const MATRIX, const std::uint64_t VERTEX, const std::vector<bool>& ALREADY_ADDED, const std::size_t SUBSAMPLED_ROWS, const std::size_t OFFSET)
+    IndexDistance find_closest_vertex(const char * const MATRIX, const std::uint64_t VERTEX, const std::vector<bool>& ALREADY_ADDED, const std::size_t SUBSAMPLED_ROWS, const std::size_t OFFSET, std::size_t& counter)
     {
         IndexDistance nn = {0, 2.0};
         for(std::uint64_t i = 0; i < ALREADY_ADDED.size(); ++i)
         {
             if(VERTEX != i && ALREADY_ADDED[i])
             {
+                ++counter;
                 double d = columns_hamming_distance(MATRIX, SUBSAMPLED_ROWS, i+OFFSET, VERTEX+OFFSET);
 
                 if(d < nn.distance)

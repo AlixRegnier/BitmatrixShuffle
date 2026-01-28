@@ -24,7 +24,7 @@ namespace bms
     double columns_hamming_distance(const char* const MATRIX, const std::size_t NB_ROWS, const std::size_t COLUMN_A, const std::size_t COLUMN_B);
 
     //Get Nearest-Neighbor using VPTree
-    IndexDistance find_closest_vertex(const char* const MATRIX, const std::size_t VERTEX, const std::vector<bool>& ALREADY_ADDED, const std::size_t SUBSAMPLED_ROWS, const std::size_t OFFSET);
+    IndexDistance find_closest_vertex(const char* const MATRIX, const std::size_t VERTEX, const std::vector<bool>& ALREADY_ADDED, const std::size_t SUBSAMPLED_ROWS, const std::size_t OFFSET, std::size_t& counter);
 
     //Hamming distance between two buffers
     std::size_t hamming_distance(const std::uint8_t* const BUFFER1, const std::uint8_t* const BUFFER2, const std::size_t LENGTH);
