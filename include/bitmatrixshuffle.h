@@ -40,6 +40,19 @@ extern nlohmann::json metrics;
 
 namespace bms
 {
+
+    //DEPRECATED
+    //Extract bit from a buffer of bytes (big-endian), result can only be 0x00 or 0x01
+    char get_bit_from_position(const char* const BYTES, const unsigned POSITION);
+
+    //DEPRECATED
+    void reorder_block_columns(char * block, const std::size_t BLOCK_NB_ROWS, const std::size_t ROW_LENGTH, const std::vector<std::uint64_t>& ORDER);
+
+    //DEPRECATED
+    //Swaps the bits of a buffer into another buffer according to given order
+    void permute_row_bits(const char* const BUFFER, char* outBuffer, const std::vector<std::uint64_t>& ORDER, const std::size_t ORDER_LENGTH);
+    
+
     std::size_t target_block_nb_rows(const std::size_t NB_COLS, const std::size_t BLOCK_TARGET_SIZE);
     
     std::size_t target_block_size(const std::size_t NB_COLS, const std::size_t BLOCK_TARGET_SIZE);

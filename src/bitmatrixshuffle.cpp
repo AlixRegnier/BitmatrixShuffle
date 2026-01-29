@@ -74,11 +74,6 @@ namespace bms
     #undef II
     #undef OUT
     #undef INP
-    /*//Extract bit from a buffer of bytes (big-endian), result can only be 0x00 or 0x01
-    char get_bit_from_position(const char* const BYTES, const unsigned POSITION);
-
-    //Swaps the bits of a buffer into another buffer according to given order
-    void permute_buffer_order(const char* const BUFFER, char* outBuffer, const unsigned* const ORDER, const unsigned ORDER_LENGTH);
     
     //Retrieve bit at given POSITION in buffer BYTES
     char get_bit_from_position(const char * const BYTES, const unsigned POSITION)
@@ -90,7 +85,7 @@ namespace bms
     }
 
     //Swaps the bits of a buffer into another buffer according to given order)
-    void permute_row_bits(const char * const BUFFER, char * outBuffer, const unsigned * const ORDER, const std::size_t ORDER_LENGTH)
+    void permute_row_bits(const char * const BUFFER, char * outBuffer, const std::vector<std::uint64_t>& ORDER, const std::size_t ORDER_LENGTH)
     {
         //Permute bits within bytes of a buffer according to a given order
         //order[i] tells that the position i has to store the bit at position order[i]
@@ -101,22 +96,22 @@ namespace bms
 
     //DEPRECATED: Reorder matrix columns row by row (bit-swapping on memory-mapped file)
     //Very slow but is SIMD-free
-    void reorder_matrix_columns(char * mapped_file, const unsigned HEADER, const std::size_t NB_COLS, const std::size_t ROW_LENGTH, const std::size_t NB_ROWS, const std::vector<std::uint64_t>& ORDER)
+    void reorder_block_columns(char * block, const std::size_t BLOCK_NB_ROWS, const std::size_t ROW_LENGTH, const std::vector<std::uint64_t>& ORDER)
     {
         //Buffer to copy a row
         char * buffer = new char[ROW_LENGTH];
 
         //Swap columns in each rows
-        for(std::size_t i = 0; i < NB_ROWS; ++i)
+        for(std::size_t i = 0; i < BLOCK_NB_ROWS; ++i)
         {
-            std::memcpy(buffer, GET_ROW_PTR(i), ROW_LENGTH);
+            std::memcpy(buffer, block+i*ROW_LENGTH, ROW_LENGTH);
             
             //Swap row bits
-            permute_buffer_order(buffer, GET_ROW_PTR(i), ORDER.data(), NB_COLS);
+            permute_row_bits(buffer, block+i*ROW_LENGTH, ORDER, ORDER.size());
         }
 
         delete[] buffer;
-    }*/
+    }
 
     std::size_t target_block_nb_rows(const std::size_t NB_COLS, const std::size_t BLOCK_TARGET_SIZE)
     {
@@ -262,26 +257,6 @@ namespace bms
         metrics["2a_max_computable_distances"] = max_computable_distances;
         metrics["2a_pct_computed_distances(%)"] = 100.0 * computed_distances / max_computable_distances;
 
-        //Try distance estimation to further extract error bounds
-        #define FAKE_SIZE 4096
-        if(ROW_LENGTH*8 > FAKE_SIZE)
-        {
-            DistanceMatrix fake_distanceMatrix(FAKE_SIZE);
-            std::vector<std::uint64_t> fake_order;
-            fake_order.resize(FAKE_SIZE);
-            std::size_t fake_computed_distances = build_double_ended_NN(transposed_matrix, fake_distanceMatrix, subsampled_rows, 0, fake_order);
-            std::size_t fake_max_computable_distances = (FAKE_SIZE * (FAKE_SIZE - 1)) / 2.0;
-            metrics["2c_fake_computed_distances"] = fake_computed_distances;
-            metrics["2c_fake_max_computable_distances"] = fake_max_computable_distances;
-            metrics["2c_fake_pct_computed_distances(%)"] = 100.0 * fake_computed_distances / fake_max_computable_distances;
-            
-            std::size_t estimated_computed_distances = estimate_computations(FAKE_SIZE, groupsize, fake_computed_distances) * NB_GROUPS + estimate_computations(FAKE_SIZE, last_group_size, fake_computed_distances);
-            metrics["2c_estimated_computed_distances"] = estimated_computed_distances;
-
-            metrics["2c_estimation_error(%)"] = 100.0 * (std::max(estimated_computed_distances, computed_distances) - std::min(estimated_computed_distances, computed_distances)) / estimated_computed_distances;
-        }
-        #undef FAKE_SIZE
-
         double original_consecutive_distances_average = original_consecutive_distances_sum / (ROW_LENGTH*8 - 1);
         double new_consecutive_distances_average = new_consecutive_distances_sum / (ROW_LENGTH*8 - 1);
 
@@ -406,14 +381,14 @@ namespace bms
         for(; i + 1 < NB_BLOCKS; ++i)
         {
             //Reorder block
-            reorder_block(GET_BLOCK_PTR(i), transposed_block, buffered_block, BLOCK_SIZE, BLOCK_NB_ROWS, ROW_LENGTH, ORDER);
+            reorder_block_columns(GET_BLOCK_PTR(i), BLOCK_NB_ROWS, ROW_LENGTH, ORDER);
             
             //Copy block from memory to disk
             std::memcpy(GET_BLOCK_PTR(i), buffered_block, BLOCK_SIZE);
         }
 
         //Reorder last block
-        reorder_block(GET_BLOCK_PTR(i), transposed_block, buffered_block, last_block_size, BLOCK_NB_ROWS, ROW_LENGTH, ORDER);
+        reorder_block_columns(GET_BLOCK_PTR(i), (NB_ROWS % BLOCK_NB_ROWS), ROW_LENGTH, ORDER);
 
         //Copy last block from memory to disk 
         std::memcpy(GET_BLOCK_PTR(i), buffered_block, last_block_size);
