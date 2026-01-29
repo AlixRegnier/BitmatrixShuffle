@@ -6,8 +6,8 @@
 #include <stdint.h>
 #include <cmath>
 
-#define GET_ROW_PTR(x) (mapped_file+HEADER+((std::size_t)(x))*ROW_LENGTH)
-#define GET_BLOCK_PTR(x) (mapped_file+HEADER+((std::size_t)(x))*BLOCK_SIZE)
+#define GET_ROW_PTR(x) (reinterpret_cast<std::uint8_t*>(mapped_file+HEADER+((std::size_t)(x))*ROW_LENGTH))
+#define GET_BLOCK_PTR(x) (reinterpret_cast<std::uint8_t*>(mapped_file+HEADER+((std::size_t)(x))*BLOCK_SIZE))
 
 namespace bms
 {
@@ -76,30 +76,30 @@ namespace bms
     #undef INP
     
     //Retrieve bit at given POSITION in buffer BYTES
-    char get_bit_from_position(const char * const BYTES, const unsigned POSITION)
+    char get_bit_from_position(const std::uint8_t * const BYTES, const unsigned POSITION)
     {
         //Equivalent instruction that is compiled to the same assembly code than second one
         //return (bytes[position >> 3] >> (8 - (position % 8) - 1)) & (char)1;
 
-        return (BYTES[POSITION >> 3] >> (~POSITION & 0x7U)) & (char)1;
+        return (BYTES[POSITION >> 3] >> (~POSITION & 0x7U)) & (std::uint8_t)1;
     }
 
     //Swaps the bits of a buffer into another buffer according to given order)
-    void permute_row_bits(const char * const BUFFER, char * outBuffer, const std::vector<std::uint64_t>& ORDER, const std::size_t ORDER_LENGTH)
+    void permute_row_bits(const std::uint8_t * const BUFFER, std::uint8_t * outBuffer, const std::vector<std::uint64_t>& ORDER)
     {
         //Permute bits within bytes of a buffer according to a given order
         //order[i] tells that the position i has to store the bit at position order[i]
 
-        for(unsigned i = 0; i < ORDER_LENGTH; ++i)
+        for(unsigned i = 0; i < ORDER.size(); ++i)
             outBuffer[i >> 3] = (outBuffer[i >> 3] << 1) | get_bit_from_position(BUFFER, ORDER[i]);
     }
 
     //DEPRECATED: Reorder matrix columns row by row (bit-swapping on memory-mapped file)
     //Very slow but is SIMD-free
-    void reorder_block_columns(char * block, const std::size_t BLOCK_NB_ROWS, const std::size_t ROW_LENGTH, const std::vector<std::uint64_t>& ORDER)
+    void reorder_block_columns(std::uint8_t * block, const std::size_t BLOCK_NB_ROWS, const std::size_t ROW_LENGTH, const std::vector<std::uint64_t>& ORDER)
     {
         //Buffer to copy a row
-        char * buffer = new char[ROW_LENGTH];
+        std::uint8_t * buffer = new std::uint8_t[ROW_LENGTH];
 
         //Swap columns in each rows
         for(std::size_t i = 0; i < BLOCK_NB_ROWS; ++i)
@@ -107,7 +107,7 @@ namespace bms
             std::memcpy(buffer, block+i*ROW_LENGTH, ROW_LENGTH);
             
             //Swap row bits
-            permute_row_bits(buffer, block+i*ROW_LENGTH, ORDER, ORDER.size());
+            permute_row_bits(buffer, block+i*ROW_LENGTH, ORDER);
         }
 
         delete[] buffer;
@@ -382,16 +382,10 @@ namespace bms
         {
             //Reorder block
             reorder_block_columns(GET_BLOCK_PTR(i), BLOCK_NB_ROWS, ROW_LENGTH, ORDER);
-            
-            //Copy block from memory to disk
-            std::memcpy(GET_BLOCK_PTR(i), buffered_block, BLOCK_SIZE);
         }
 
         //Reorder last block
         reorder_block_columns(GET_BLOCK_PTR(i), (NB_ROWS % BLOCK_NB_ROWS), ROW_LENGTH, ORDER);
-
-        //Copy last block from memory to disk 
-        std::memcpy(GET_BLOCK_PTR(i), buffered_block, last_block_size);
 
         BMS_DELETE_MATRIX(buffered_block);
         BMS_DELETE_MATRIX(transposed_block);
@@ -501,7 +495,7 @@ namespace bms
         for(; i + 1 < NB_BLOCKS; ++i)
         {
             START_TIMER;
-            reorder_block(GET_BLOCK_PTR(i), transposed_block, buffered_block, BLOCK_SIZE, BLOCK_NB_ROWS, ROW_LENGTH, ORDER);
+            reorder_block_columns(GET_BLOCK_PTR(i), BLOCK_NB_ROWS, ROW_LENGTH, ORDER);
             END_TIMER;
             time_reorder += __integral_time;
 
@@ -515,7 +509,7 @@ namespace bms
 
         //Handle last block that may be smaller, only block effective size differs
         START_TIMER;
-        reorder_block(GET_BLOCK_PTR(i), transposed_block, buffered_block, last_block_size, BLOCK_NB_ROWS, ROW_LENGTH, ORDER);
+        reorder_block_columns(GET_BLOCK_PTR(i), (NB_ROWS % BLOCK_NB_ROWS), ROW_LENGTH, ORDER);
         END_TIMER;
         time_reorder += __integral_time;
 
