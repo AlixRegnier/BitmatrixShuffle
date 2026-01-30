@@ -76,7 +76,7 @@ namespace bms
     #undef INP
     
     //Retrieve bit at given POSITION in buffer BYTES
-    char get_bit_from_position(const std::uint8_t * const BYTES, const unsigned POSITION)
+    std::uint8_t get_bit_from_position(const std::uint8_t * const BYTES, const unsigned POSITION)
     {
         //Equivalent instruction that is compiled to the same assembly code than second one
         //return (bytes[position >> 3] >> (8 - (position % 8) - 1)) & (char)1;
@@ -364,9 +364,6 @@ namespace bms
         std::size_t last_block_size = (NB_ROWS % BLOCK_NB_ROWS) * ROW_LENGTH;
         if(last_block_size == 0)
             last_block_size = BLOCK_SIZE; //Each blocks are full, so last is full
-
-        char * buffered_block = BMS_ALLOCATE_MATRIX(BLOCK_NB_ROWS, ROW_LENGTH*8);
-        char * transposed_block = BMS_ALLOCATE_MATRIX(BLOCK_NB_ROWS, ROW_LENGTH*8);
     
         int fd = open(MATRIX_PATH.c_str(), O_RDWR);
         char * mapped_file = (char*)mmap(nullptr, FILE_SIZE, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
@@ -386,9 +383,6 @@ namespace bms
 
         //Reorder last block
         reorder_block_columns(GET_BLOCK_PTR(i), (NB_ROWS % BLOCK_NB_ROWS), ROW_LENGTH, ORDER);
-
-        BMS_DELETE_MATRIX(buffered_block);
-        BMS_DELETE_MATRIX(transposed_block);
 
         munmap(mapped_file, FILE_SIZE);
         close(fd);
@@ -465,10 +459,9 @@ namespace bms
         std::size_t last_block_size = (NB_ROWS % BLOCK_NB_ROWS) * ROW_LENGTH;
         if(last_block_size == 0)
             last_block_size = BLOCK_SIZE; //Each blocks are full, so last is full
-
-        char * buffered_block = BMS_ALLOCATE_MATRIX(BLOCK_NB_ROWS, ROW_LENGTH*8);
-        char * transposed_block = BMS_ALLOCATE_MATRIX(BLOCK_NB_ROWS, ROW_LENGTH*8);
     
+        std::uint8_t * buffered_block = reinterpret_cast<std::uint8_t*>(BMS_ALLOCATE_MATRIX(BLOCK_NB_ROWS, ROW_LENGTH*8));
+
         int fd = open(MATRIX_PATH.c_str(), O_RDONLY);
 
         //Since no modifications will be applied to original matrix, open it with MAP_PRIVATE mode
@@ -489,19 +482,19 @@ namespace bms
         END_TIMER;
         time_compression += __integral_time;
 
-        
         std::size_t i = 0;
         //Process each blocks except the last
         for(; i + 1 < NB_BLOCKS; ++i)
         {
+            std::memcpy(buffered_block, GET_BLOCK_PTR(i), BLOCK_SIZE);
             START_TIMER;
-            reorder_block_columns(GET_BLOCK_PTR(i), BLOCK_NB_ROWS, ROW_LENGTH, ORDER);
+            reorder_block_columns(buffered_block, BLOCK_NB_ROWS, ROW_LENGTH, ORDER);
             END_TIMER;
             time_reorder += __integral_time;
 
             //Bring buffered block to compressor
             START_TIMER;
-            block_compressor.append_block(reinterpret_cast<std::uint8_t*>(buffered_block), BLOCK_SIZE);
+            block_compressor.append_block(buffered_block, BLOCK_SIZE);
             END_TIMER;
             time_compression += __integral_time;
 
@@ -509,14 +502,15 @@ namespace bms
 
         //Handle last block that may be smaller, only block effective size differs
         START_TIMER;
-        reorder_block_columns(GET_BLOCK_PTR(i), (NB_ROWS % BLOCK_NB_ROWS), ROW_LENGTH, ORDER);
+        std::memcpy(buffered_block, GET_BLOCK_PTR(i), last_block_size);
+        reorder_block_columns(buffered_block, (NB_ROWS % BLOCK_NB_ROWS), ROW_LENGTH, ORDER);
         END_TIMER;
         time_reorder += __integral_time;
 
         //Bring last block to compressor
         START_TIMER;
-        block_compressor.append_block(reinterpret_cast<std::uint8_t*>(buffered_block), last_block_size);
-
+        block_compressor.append_block(buffered_block, last_block_size);
+        
         //Close
         block_compressor.close();
         END_TIMER;
@@ -526,7 +520,6 @@ namespace bms
         metrics["3_time_reorder(s)"] = time_reorder / 1000.0;
 
         BMS_DELETE_MATRIX(buffered_block);
-        BMS_DELETE_MATRIX(transposed_block);
 
         munmap(mapped_file, FILE_SIZE);
         close(fd);

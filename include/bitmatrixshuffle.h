@@ -43,7 +43,7 @@ namespace bms
 
     //DEPRECATED
     //Extract bit from a buffer of bytes (big-endian), result can only be 0x00 or 0x01
-    char get_bit_from_position(const std::uint8_t* const BYTES, const unsigned POSITION);
+    std::uint8_t get_bit_from_position(const std::uint8_t* const BYTES, const unsigned POSITION);
 
     //DEPRECATED
     void reorder_block_columns(std::uint8_t * block, const std::size_t BLOCK_NB_ROWS, const std::size_t ROW_LENGTH, const std::vector<std::uint64_t>& ORDER);
