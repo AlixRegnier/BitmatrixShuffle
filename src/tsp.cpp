@@ -265,7 +265,7 @@ namespace bms {
         IndexDistance nn = {0, 2.0};
         for(std::uint64_t i = 0; i < ALREADY_ADDED.size(); ++i)
         {
-            if(VERTEX != i && ALREADY_ADDED[i])
+            if(VERTEX != i && !ALREADY_ADDED[i])
             {
                 ++counter;
                 double d = columns_hamming_distance(MATRIX, SUBSAMPLED_ROWS, i+OFFSET, VERTEX+OFFSET);
